@@ -3,22 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0b0d">
+<meta name="theme-color" content="#08090A">
 <title>Claudio</title>
 <link rel="manifest" href="/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:ROND,wght@100,300;100,500;100,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="bar">
-    <div class="brand">
-      <span class="dot" id="dot"></span>
-      <h1>Claudio</h1>
-    </div>
-    <div class="meta" id="meta">连接中…</div>
-  </header>
 
-  <main id="feed">
-    <div class="intro">
+<header class="bar">
+  <button class="brand" id="brand" aria-label="打开个人资料">
+    <span class="av" id="brand-av">L</span>
+    <span class="wordmark">Claudio</span>
+  </button>
+  <div class="status">
+    <span class="led" id="led"></span>
+    <span class="lbl" id="status">连接中</span>
+  </div>
+</header>
+
+<!-- ═══ 电台主视图 ═══ -->
+<main class="view substrate" id="view-radio">
+
+  <!-- 签名元素：最大的元素不承担交互 -->
+  <section class="clockface">
+    <div class="clock" id="clock">--:--</div>
+    <div class="slot" id="slot">&nbsp;</div>
+    <div class="clock-date" id="clock-date">&nbsp;</div>
+    <div class="slot-src" id="slot-src"></div>
+  </section>
+
+  <!-- 常驻播放器 -->
+  <section class="player" id="player" hidden>
+    <div class="player-top">
+      <span class="eq" id="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="np"><span class="np-title" id="np-title"></span></span>
+      <span class="transport">
+        <button class="tbtn" id="prev" aria-label="上一首">◀◀</button>
+        <button class="tbtn on" id="toggle" aria-label="播放或暂停">▶</button>
+        <button class="tbtn" id="next" aria-label="下一首">▶▶</button>
+      </span>
+    </div>
+    <div class="scrub">
+      <span class="rd rd-live" id="t-now">0:00</span>
+      <span class="rail" id="rail"><i id="rail-fill"></i></span>
+      <span class="rd" id="t-total">0:30</span>
+    </div>
+  </section>
+
+  <!-- 队列 -->
+  <section id="queue-section" hidden>
+    <div class="queue-head">
+      <span class="lbl">Queue</span>
+      <span class="rd" id="queue-count">0 TRACKS</span>
+    </div>
+    <div class="queue" id="queue"></div>
+  </section>
+
+  <!-- 对话 -->
+  <div class="feed" id="feed">
+    <div class="intro" id="intro">
       <p>跟我说说你现在想听什么 —— 或者只说你此刻的状态。</p>
       <div class="chips">
         <button class="chip">随便</button>
@@ -27,14 +73,58 @@
         <button class="chip">想哭</button>
       </div>
     </div>
-  </main>
+  </div>
 
   <footer class="composer">
-    <input id="input" type="text" placeholder="说点什么…" autocomplete="off">
-    <button id="send" aria-label="发送">↑</button>
+    <input id="input" type="text" placeholder="Say something to the DJ…" autocomplete="off">
+    <button class="send" id="send" aria-label="发送">↑</button>
   </footer>
+</main>
 
-  <audio id="audio"></audio>
-  <script type="module" src="/app.js"></script>
+<!-- ═══ 个人资料视图 —— 本质是 user/*.md 的可视化 ═══ -->
+<main class="view substrate" id="view-profile" hidden>
+  <div class="bar">
+    <button class="brand" id="back" aria-label="返回电台">
+      <span class="tbtn" aria-hidden="true">◀</span>
+      <span class="lbl">Profile</span>
+    </button>
+    <button class="chip" id="reset">清空会话</button>
+  </div>
+
+  <div class="pf-head">
+    <span class="av av-lg">L</span>
+    <div class="pf-name">listener</div>
+    <p class="pf-bio">
+      三个 markdown 文件写清楚我听什么、什么时候听、以及我说的话该怎么翻译。
+      剩下的交给它。
+    </p>
+  </div>
+
+  <div class="pf-stats">
+    <div class="stat"><b id="s-played">—</b><span class="lbl">Played</span></div>
+    <div class="stat"><b id="s-peak">—</b><span class="lbl">Peak Hour</span></div>
+    <div class="stat"><b id="s-routines">—</b><span class="lbl">Routines</span></div>
+  </div>
+
+  <div class="pf-sec">
+    <span class="lbl">最近播过</span>
+    <div class="pf-list" id="pf-recent">
+      <span class="pf-empty">还没有播放记录。</span>
+    </div>
+  </div>
+
+  <div class="pf-sec">
+    <span class="lbl">语料</span>
+    <p class="src-note" id="pf-src">
+      taste.md · routines.md · mood-rules.md
+    </p>
+    <p class="pf-empty">
+      推荐质量的上限由这三个文件决定。它们在本机，不会被提交。
+    </p>
+  </div>
+</main>
+
+<audio id="audio"></audio>
+<script type="module" src="/app.js"></script>
 </body>
 </html>

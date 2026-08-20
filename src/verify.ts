@@ -152,6 +152,12 @@ const checks: [string, boolean][] = [
     ordered.findIndex((t) => altOnly.includes(t)) >= exactOnly.length],
   ["exact 保持模型原始顺序",
     exactOnly[0]?.title === "富士山下" && exactOnly[1]?.title === "海阔天空"],
+  // 模板里的 <!-- --> 是写给用户看的填写指引。漏进 prompt 的话，
+  // 模型会把「✗ 没用：喜欢周杰伦」这种示范当成用户的真实偏好。
+  ["语料剥离了模板指引注释",
+    !ctx1.stable.includes("写作原则") && !ctx1.stable.includes("✗ 没用")],
+  ["语料排除了 .example.md 模板",
+    !ctx1.stable.includes(".example.md")],
 ];
 let failed = simFailed;
 for (const [name, ok] of checks) {

@@ -62,6 +62,26 @@ is something a DJ can actually cite.
 `- 07:00–09:00 commute: …` and the display reads **commute** at 7:30 instead of
 a generic "morning."
 
+### Seeding from your existing library
+
+Writing taste from a blank page is hard. If you use Apple Music on a Mac, export
+what you already listen to and let the numbers speak first:
+
+```bash
+npm run export:apple   # reads Music.app over AppleScript → user/raw/apple-music.json
+npm run ingest         # distills it → user/library.md
+```
+
+The raw export is far too large for a prompt — a few hundred tracks is already
+hundreds of thousands of tokens, and the model would drown in IDs. `ingest`
+distills it to roughly 1,200 tokens: artists ranked by **play count rather than
+save count** (saving a lot is not the same as listening a lot), genre and era
+distribution, the tracks you actually loop, and your own playlist names — which
+say more about how you file music than any statistic.
+
+Both the raw export and `library.md` are gitignored. Re-run either command
+whenever your library changes.
+
 ## Design
 
 `design/mockup.html` records the visual direction — open it in a browser, the

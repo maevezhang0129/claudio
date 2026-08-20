@@ -9,6 +9,9 @@ cache/
 user/*.md
 !user/*.example.md
 
+# 平台导出的原始曲库 —— 完整收听记录，比语料本身更私密
+user/raw/
+
 .DS_Store
 
 # 第三方参考素材（他人原创内容）——只留本地，绝不提交。

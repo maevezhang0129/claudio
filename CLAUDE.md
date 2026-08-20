@@ -78,11 +78,29 @@ bonus **must** scale with length ratio — without it, a fabricated title
 leak through. This was a real regression; `npm run verify` pins it with eight
 edge cases. Re-run verify after touching any threshold.
 
+### Corpus is distilled, never dumped
+
+`scripts/export-apple-music.mjs` pulls the local library over AppleScript;
+`scripts/ingest.mjs` distills it into `user/library.md` (~1,200 tokens). Never
+feed a raw export into the prompt — a few hundred tracks is already hundreds of
+thousands of tokens.
+
+Rank artists by **play count**, not save count. The two produce different
+orderings and play count is the one that reflects actual listening.
+
+`userCorpus()` in `src/context/assemble.ts` strips HTML comments before the
+corpus reaches the model. The templates use `<!-- -->` for fill-in guidance
+aimed at the human; leaking it makes the model read "✗ 没用：喜欢周杰伦" as a
+stated preference. Two `npm run verify` assertions guard this.
+
 ## Privacy
 
 `user/*.md` is the owner's personal taste corpus — listening habits, daily
 routine, emotional rules. It is **gitignored**. Only `user/*.example.md`
 templates are committed.
+
+`user/raw/` holds full platform exports — every track and play count. Also
+gitignored, and more sensitive than the corpus itself.
 
 `src/context/assemble.ts` filters out `.example.` files so the blank templates
 never get fed into the prompt alongside real corpus content.

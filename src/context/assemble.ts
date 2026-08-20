@@ -66,10 +66,28 @@ async function userCorpus(rootDir: string): Promise<string> {
 
   const parts: string[] = [];
   for (const name of files) {
-    const body = (await readFile(path.join(dir, name), "utf8")).trim();
+    const raw = await readFile(path.join(dir, name), "utf8");
+    // 模板里的 <!-- --> 是写给用户看的填写指引，不是语料。
+    // 不剥掉的话，模型会读到「✗ 没用：喜欢周杰伦」这种示范，
+    // 把它当成这个人的真实偏好。
+    const body = stripComments(raw);
     if (body) parts.push(`### ${name}\n${body}`);
   }
   return parts.length ? parts.join("\n\n") : "（用户还没有提供品味语料）";
+}
+
+/** 剥掉 HTML 注释与由此产生的空行，返回去空白后的正文 */
+function stripComments(md: string): string {
+  return md
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .split("\n")
+    .filter((line, i, arr) => {
+      // 折叠连续空行，避免剥完留下大片空白
+      if (line.trim()) return true;
+      return i > 0 && arr[i - 1]!.trim() !== "";
+    })
+    .join("\n")
+    .trim();
 }
 
 /** ③ 环境注入。阶段①只有时间；阶段③再接天气和日历 */

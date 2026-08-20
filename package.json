@@ -9,7 +9,9 @@
     "dev:stub": "CLAUDIO_BRAIN=stub node --watch src/server.ts",
     "start": "node src/server.ts",
     "verify": "node src/verify.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "export:apple": "node scripts/export-apple-music.mjs",
+    "ingest": "node scripts/ingest.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",

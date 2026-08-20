@@ -1,0 +1,701 @@
+<title>Claudio 视觉稿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:ROND,wght@100,300;100,500;100,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* ───────────────────────────────────────────────
+   Claudio · 设计令牌
+   单一深色世界：这是一块设备屏幕，不是一个深色主题。
+   所有颜色显式绘制，不继承宿主主题。
+   ─────────────────────────────────────────────── */
+:root {
+  --void:   #08090A;
+  --panel:  #101314;
+  --raise:  #171B1D;
+  --line:   #232829;
+  --ink:    #E9EDEC;   /* 微偏绿的白 */
+  --ash:    #697375;   /* 微偏绿的灰 */
+  --signal: #4ADE80;   /* 唯一的绿：只表示 live / 正在播 */
+  --amber:  #D9A441;   /* 只表示"替代版本" */
+
+  /* 像素基底：整个界面吸附到这个网格 */
+  --pitch: 4px;
+
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --dot:  "Doto", "IBM Plex Mono", monospace;
+  --sans: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  padding: calc(var(--pitch) * 8) calc(var(--pitch) * 4);
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* 点格基底 —— 不是纹理，是像素基底。间距锁死 4px。 */
+.substrate {
+  background-image: radial-gradient(var(--raise) 1px, transparent 1px);
+  background-size: var(--pitch) var(--pitch);
+  background-position: 0 0;
+}
+
+/* ── 页头 ── */
+.masthead {
+  max-width: 1080px;
+  margin: 0 auto calc(var(--pitch) * 10);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--pitch) * 2);
+}
+.masthead h1 {
+  font-family: var(--dot);
+  font-weight: 500;
+  font-size: clamp(32px, 7vw, 52px);
+  letter-spacing: .1em;
+  margin: 0;
+  line-height: 1;
+}
+.masthead p {
+  margin: 0;
+  color: var(--ash);
+  max-width: 62ch;
+  font-size: 14px;
+}
+
+/* ── 读数 ──
+   Doto 的第二个用途层：机器显示给你看的数字与标识。
+   下限 13px —— 再小点会糊在一起，那种尺寸交给等宽字。 */
+.rd {
+  font-family: var(--dot);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: .06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ash);
+  line-height: 1.2;
+}
+.rd.hi { color: var(--ink); }
+.rd.live { color: var(--signal); }
+
+/* ── 微标签系统 ──
+   等宽、全大写、字距拉开、极小号。像仪器面板上的丝印。 */
+.lbl {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+/* ── 屏幕框 ── */
+.screens {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: calc(var(--pitch) * 8);
+  align-items: start;
+}
+.screen-wrap { display: flex; flex-direction: column; gap: calc(var(--pitch) * 3); }
+.screen-cap { display: flex; align-items: baseline; gap: calc(var(--pitch) * 2); }
+.screen-cap .n {
+  font-family: var(--dot);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--signal);
+  line-height: 1;
+}
+.screen-cap .t { font-size: 13px; color: var(--ash); }
+
+.screen {
+  border: 1px solid var(--line);
+  border-radius: calc(var(--pitch) * 5);
+  background: var(--void);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 顶栏 ── */
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--pitch) * 3) calc(var(--pitch) * 4);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: calc(var(--pitch) * 2.5); }
+.wordmark {
+  font-family: var(--dot);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: .08em;
+  line-height: 1;
+}
+.onair { display: flex; align-items: center; gap: calc(var(--pitch) * 1.5); }
+.led {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 6px var(--signal);   /* LED 辉光 */
+}
+.onair .lbl { color: var(--signal); }
+
+/* 头像：点阵基底上的一个字母 */
+.av {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--raise);
+  display: grid; place-items: center;
+  font-family: var(--dot);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ash);
+  flex: none;
+}
+.av.lg { width: 76px; height: 76px; font-size: 34px; border-color: var(--signal); color: var(--signal); }
+.av.sm { width: 22px; height: 22px; font-size: 11px; }
+
+/* ── 签名元素：时段时钟 ──
+   最大的元素不承担任何交互。时间下面那行是从 routines.md
+   读出的当前场景名 —— 别人的 Claudio 上会显示别的词。 */
+.clockface {
+  padding: calc(var(--pitch) * 9) calc(var(--pitch) * 4) calc(var(--pitch) * 8);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--pitch) * 2);
+  text-align: center;
+}
+.clock {
+  font-family: var(--dot);
+  font-weight: 500;
+  font-size: clamp(52px, 15vw, 76px);
+  line-height: .9;
+  letter-spacing: .06em;
+  font-variant-numeric: tabular-nums;
+}
+.slot {
+  font-size: 17px;
+  letter-spacing: .32em;
+  text-indent: .32em;   /* 补偿字距造成的右偏 */
+  color: var(--ink);
+}
+.slot-src { color: var(--ash); }
+.date { font-family: var(--dot); font-weight: 300; font-size: 14px; letter-spacing: .1em; color: var(--ash); font-variant-numeric: tabular-nums; }
+
+/* ── 常驻播放器 ── */
+.player {
+  padding: calc(var(--pitch) * 3) calc(var(--pitch) * 4);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--pitch) * 2.5);
+}
+.player-top { display: flex; align-items: center; gap: calc(var(--pitch) * 3); }
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 16px; flex: none; }
+.eq i {
+  width: 3px; background: var(--signal); display: block;
+  animation: bounce 900ms ease-in-out infinite;
+}
+.eq i:nth-child(1) { height: 60%; animation-delay: 0ms; }
+.eq i:nth-child(2) { height: 100%; animation-delay: 160ms; }
+.eq i:nth-child(3) { height: 40%; animation-delay: 320ms; }
+@keyframes bounce { 50% { transform: scaleY(.35); } }
+
+.np { min-width: 0; flex: 1; }
+.np-title { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-title b { font-weight: 500; }
+.np-title span { color: var(--ash); }
+
+.transport { display: flex; align-items: center; gap: calc(var(--pitch) * 1.5); flex: none; }
+.tbtn {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 9px;
+  display: grid; place-items: center;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--mono);
+}
+.tbtn.on { border-color: var(--signal); color: var(--signal); }
+.tbtn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+.scrub { display: flex; align-items: center; gap: calc(var(--pitch) * 2); }
+
+.rail { flex: 1; height: 2px; background: var(--line); position: relative; }
+.rail i { position: absolute; inset: 0 auto 0 0; width: 41%; background: var(--signal); display: block; }
+
+/* ── 队列 ── */
+.queue-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: calc(var(--pitch) * 2.5) calc(var(--pitch) * 4);
+  border-bottom: 1px solid var(--line);
+}
+.queue { display: flex; flex-direction: column; }
+.trk {
+  display: flex; align-items: center; gap: calc(var(--pitch) * 3);
+  padding: calc(var(--pitch) * 2.5) calc(var(--pitch) * 4);
+  cursor: pointer;
+}
+.trk:hover { background: var(--panel); }
+.trk .idx {
+  font-family: var(--dot); font-weight: 500; font-size: 15px; color: var(--ash);
+  font-variant-numeric: tabular-nums; flex: none; width: 22px; line-height: 1;
+}
+.trk.playing .idx { color: var(--signal); }
+.trk-body { min-width: 0; flex: 1; }
+.trk-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trk-artist { font-size: 12px; color: var(--ash); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trk .dur { font-family: var(--dot); font-weight: 500; font-size: 13px; color: var(--ash); font-variant-numeric: tabular-nums; flex: none; letter-spacing: .06em; }
+
+/* alternate：压暗，排在虚线之下 */
+.trk.alt { opacity: .55; }
+.trk.alt:hover { opacity: 1; }
+.trk.alt .trk-artist { color: var(--amber); }
+
+/* ── 虚线分隔符：系统事件的声音 ──
+   解决"系统消息怎么显示才不像聊天气泡"。 */
+.rule {
+  display: flex; align-items: center; gap: calc(var(--pitch) * 3);
+  padding: calc(var(--pitch) * 2) calc(var(--pitch) * 4);
+}
+.rule::before, .rule::after {
+  content: ""; flex: 1; height: 0;
+  border-top: 1px dotted var(--line);
+}
+.rule .lbl { white-space: nowrap; font-size: 9.5px; }
+.rule.warn .lbl { color: var(--amber); }
+
+/* ── 对话 ── */
+.talk { display: flex; flex-direction: column; gap: calc(var(--pitch) * 4); padding: calc(var(--pitch) * 4); }
+.turn { display: flex; gap: calc(var(--pitch) * 3); }
+.turn-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: calc(var(--pitch) * 1.5); }
+.say { font-size: 15px; line-height: 1.75; white-space: pre-line; }
+.meta { display: flex; align-items: center; gap: calc(var(--pitch) * 2); }
+.reason {
+  font-size: 12.5px; color: var(--ash);
+  border-left: 1px solid var(--line);
+  padding-left: calc(var(--pitch) * 3);
+}
+.turn.me { justify-content: flex-end; }
+.turn.me .turn-body { align-items: flex-end; flex: 0 1 auto; }
+.turn.me .say {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: calc(var(--pitch) * 2) calc(var(--pitch) * 3);
+  font-size: 14px;
+}
+
+/* ── 输入 ── */
+.composer {
+  display: flex; gap: calc(var(--pitch) * 2);
+  padding: calc(var(--pitch) * 3) calc(var(--pitch) * 4);
+  border-top: 1px solid var(--line);
+}
+.composer .fake-input {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: calc(var(--pitch) * 2.5) calc(var(--pitch) * 3);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ash);
+}
+.send {
+  width: 36px; flex: none;
+  border: 1px solid var(--signal);
+  background: transparent;
+  color: var(--signal);
+  cursor: pointer;
+  font-size: 14px;
+}
+.send:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+/* ── 个人资料页 ── */
+.profile { display: flex; flex-direction: column; }
+.pf-head {
+  display: flex; flex-direction: column; align-items: center; gap: calc(var(--pitch) * 2);
+  padding: calc(var(--pitch) * 8) calc(var(--pitch) * 4) calc(var(--pitch) * 6);
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+.pf-name { font-family: var(--dot); font-weight: 500; font-size: 30px; letter-spacing: .08em; line-height: 1; }
+.pf-bio { font-size: 14px; color: var(--ink); max-width: 32ch; line-height: 1.7; }
+
+.pf-stats { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
+.stat {
+  padding: calc(var(--pitch) * 4) calc(var(--pitch) * 2);
+  display: flex; flex-direction: column; align-items: center; gap: calc(var(--pitch));
+  border-right: 1px solid var(--line);
+}
+.stat:last-child { border-right: 0; }
+.stat b {
+  font-family: var(--dot); font-weight: 700; font-size: 28px; line-height: 1;
+  font-variant-numeric: tabular-nums; letter-spacing: .04em;
+}
+
+.pf-sec { padding: calc(var(--pitch) * 4); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: calc(var(--pitch) * 3); }
+.pf-sec:last-child { border-bottom: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: calc(var(--pitch) * 2); }
+.chip {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  border: 1px solid var(--line);
+  padding: calc(var(--pitch) * 1.5) calc(var(--pitch) * 3);
+  border-radius: 999px;
+  color: var(--ash);
+}
+.chip.no { border-style: dashed; text-decoration: line-through; opacity: .65; }
+
+.anchors { display: flex; flex-direction: column; gap: calc(var(--pitch) * 2); }
+.anchor { display: flex; gap: calc(var(--pitch) * 3); align-items: baseline; font-size: 13px; }
+.anchor .idx { font-family: var(--dot); font-weight: 500; font-size: 13px; color: var(--ash); flex: none; letter-spacing: .06em; }
+.anchor span { color: var(--ash); }
+
+.src-note {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em;
+  color: var(--ash); opacity: .7;
+}
+
+/* ── 令牌说明 ── */
+.legend {
+  max-width: 1080px; margin: calc(var(--pitch) * 12) auto 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: calc(var(--pitch) * 8);
+  border-top: 1px solid var(--line);
+  padding-top: calc(var(--pitch) * 6);
+}
+.legend section { display: flex; flex-direction: column; gap: calc(var(--pitch) * 3); }
+.swatches { display: flex; flex-direction: column; gap: calc(var(--pitch) * 2); }
+.sw { display: flex; align-items: center; gap: calc(var(--pitch) * 3); font-family: var(--mono); font-size: 11px; }
+.sw i { width: 22px; height: 22px; border: 1px solid var(--line); flex: none; display: block; }
+.sw b { font-weight: 400; color: var(--ink); min-width: 62px; }
+.sw span { color: var(--ash); font-size: 10.5px; }
+
+.roles { display: flex; flex-direction: column; gap: calc(var(--pitch) * 3); }
+.role { display: flex; flex-direction: column; gap: 2px; }
+.role .demo-dot { font-family: var(--dot); font-weight: 500; font-size: 26px; letter-spacing: .08em; }
+.role .demo-mono { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+.role .demo-sans { font-size: 14px; }
+.role .why { font-size: 11.5px; color: var(--ash); }
+
+@media (prefers-reduced-motion: reduce) {
+  .eq i { animation: none; }
+  * { transition: none !important; }
+}
+</style>
+
+<div class="masthead">
+  <h1>Claudio</h1>
+  <p>
+    电台视觉方向 · 第二版。核心判断是把界面的隐喻从「聊天」换成「广播」——
+    最大的元素不承担交互，功能标签退成仪器丝印，绿色只保留一种含义。
+    单一深色，不做浅色主题：这是一块设备屏幕，不是一个可切换的皮肤。
+    页面里的曲目与资料均为示例数据。
+  </p>
+</div>
+
+<div class="screens">
+
+  <!-- ══════════ 屏 1：电台主页 ══════════ -->
+  <div class="screen-wrap">
+    <div class="screen-cap">
+      <span class="n">01</span>
+      <span class="t">电台主页 —— 时钟、常驻播放器、队列、对话</span>
+    </div>
+
+    <div class="screen substrate">
+      <div class="bar">
+        <div class="brand">
+          <span class="av">L</span>
+          <span class="wordmark">Claudio</span>
+        </div>
+        <div class="onair">
+          <span class="led"></span>
+          <span class="lbl">On Air</span>
+        </div>
+      </div>
+
+      <!-- 签名元素 -->
+      <div class="clockface">
+        <div class="clock" id="clock">23:47</div>
+        <div class="slot">
+          <span id="slot">深夜</span>
+        </div>
+        <div class="date">
+          <span id="date">周三 · 20-AUG-2026</span>
+        </div>
+        <div class="src-note">场景取自 routines.md</div>
+      </div>
+
+      <!-- 常驻播放器 -->
+      <div class="player">
+        <div class="player-top">
+          <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="np">
+            <span class="np-title"><b>富士山下</b> <span>— 陈奕迅</span></span>
+          </span>
+          <span class="transport">
+            <button class="tbtn" aria-label="上一首">◀◀</button>
+            <button class="tbtn on" aria-label="暂停">❚❚</button>
+            <button class="tbtn" aria-label="下一首">▶▶</button>
+          </span>
+        </div>
+        <div class="scrub">
+          <span class="rd live">0:12</span>
+          <span class="rail"><i></i></span>
+          <span class="rd">0:30</span>
+        </div>
+      </div>
+
+      <!-- 队列 -->
+      <div class="queue-head">
+        <span class="lbl">Queue</span>
+        <span class="rd">3 TRACKS</span>
+      </div>
+      <div class="queue">
+        <div class="trk playing">
+          <span class="idx">01</span>
+          <span class="trk-body">
+            <span class="trk-name">富士山下</span>
+            <span class="trk-artist">陈奕迅 · What's Going On...?</span>
+          </span>
+          <span class="dur">0:30</span>
+        </div>
+        <div class="trk">
+          <span class="idx">02</span>
+          <span class="trk-body">
+            <span class="trk-name">无与伦比的美丽</span>
+            <span class="trk-artist">苏打绿 · 无与伦比的美丽</span>
+          </span>
+          <span class="dur">0:30</span>
+        </div>
+        <div class="rule"><span class="lbl">没找到原版 · 以下是替代</span></div>
+        <div class="trk alt">
+          <span class="idx">03</span>
+          <span class="trk-body">
+            <span class="trk-name">Music for Airports</span>
+            <span class="trk-artist">Briar Moonwhisper · 曲库里没有 Brian Eno 的版本</span>
+          </span>
+          <span class="dur">0:30</span>
+        </div>
+      </div>
+
+      <div class="rule warn"><span class="lbl">已跳过 1 首曲库里不存在的曲目</span></div>
+
+      <!-- 对话 -->
+      <div class="talk">
+        <div class="turn me">
+          <div class="turn-body">
+            <div class="say">有点累</div>
+          </div>
+        </div>
+
+        <div class="turn">
+          <span class="av sm">C</span>
+          <div class="turn-body">
+            <div class="meta">
+              <span class="lbl">Claudio</span>
+              <span class="rd">23:47</span>
+            </div>
+            <div class="say">那就不上强度了。
+这几首都可以不集中注意力听，走神了也不亏。</div>
+            <div class="reason">mood-rules.md 里写着「我说累 = 不要励志，不要激昂」，所以避开了所有大编制和副歌轰炸。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <span class="fake-input">Say something to the DJ…</span>
+        <button class="send" aria-label="发送">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 屏 2：个人资料页 ══════════ -->
+  <div class="screen-wrap">
+    <div class="screen-cap">
+      <span class="n">02</span>
+      <span class="t">个人资料 —— 点头像进入，本质是 taste.md 的可视化</span>
+    </div>
+
+    <div class="screen substrate profile">
+      <div class="bar">
+        <div class="brand">
+          <button class="tbtn" aria-label="返回">◀</button>
+          <span class="lbl">Profile</span>
+        </div>
+        <span class="lbl">Edit</span>
+      </div>
+
+      <div class="pf-head">
+        <span class="av lg">L</span>
+        <div class="pf-name">listener</div>
+        <div class="lbl">听龄 14 年 · 华语为主</div>
+        <p class="pf-bio">
+          三个 markdown 文件写清楚我听什么、什么时候听、以及我说的话
+          该怎么翻译。剩下的交给它。
+        </p>
+      </div>
+
+      <div class="pf-stats">
+        <div class="stat"><b>1,284</b><span class="lbl">Played</span></div>
+        <div class="stat"><b>23:00</b><span class="lbl">Peak Hour</span></div>
+        <div class="stat"><b>6</b><span class="lbl">Routines</span></div>
+      </div>
+      <div class="pf-sec" style="padding-top: calc(var(--pitch) * 3); padding-bottom: calc(var(--pitch) * 3);">
+        <p class="src-note">Played 取自 plays 表 · Peak Hour 按播放时刻聚合 · Routines 数自 routines.md</p>
+      </div>
+
+      <div class="pf-sec">
+        <span class="lbl">听什么</span>
+        <div class="chips">
+          <span class="chip">90s 华语</span>
+          <span class="chip">Post-Punk</span>
+          <span class="chip">Shoegaze</span>
+          <span class="chip">Neo-Classical</span>
+          <span class="chip">Jazz-Hiphop</span>
+          <span class="chip">J-Rock</span>
+          <span class="chip">Shibuya-Kei</span>
+        </div>
+      </div>
+
+      <!-- 排除比包含更能定义一个人 —— 所以它和"听什么"平级，不是附属 -->
+      <div class="pf-sec">
+        <span class="lbl">不听什么</span>
+        <div class="chips">
+          <span class="chip no">抖音热歌</span>
+          <span class="chip no">加速版</span>
+          <span class="chip no">纯电子 / EDM</span>
+          <span class="chip no">过度修音</span>
+        </div>
+        <p class="src-note">例外：有实体乐队伴奏的说唱可以</p>
+      </div>
+
+      <div class="pf-sec">
+        <span class="lbl">会反复回去听的</span>
+        <div class="anchors">
+          <div class="anchor"><span class="idx">01</span><span><b>后青春期的诗</b> — 五月天 <span>· 整张</span></span></div>
+          <div class="anchor"><span class="idx">02</span><span><b>In Rainbows</b> — Radiohead</span></div>
+          <div class="anchor"><span class="idx">03</span><span><b>U87</b> — 陈奕迅</span></div>
+        </div>
+      </div>
+
+      <div class="pf-sec">
+        <span class="lbl">我说的话怎么翻译</span>
+        <div class="anchors">
+          <div class="anchor"><span class="idx">→</span><span>「随便」<span> = 最近没听过、但符合长期偏好的</span></span></div>
+          <div class="anchor"><span class="idx">→</span><span>「累」<span> = 不要励志，可以不集中注意力听</span></span></div>
+          <div class="anchor"><span class="idx">→</span><span>「想哭」<span> = 不要安慰，直接给最狠的那首</span></span></div>
+        </div>
+        <p class="src-note">语料最后更新 · 20-AUG-2026 · taste.md / routines.md / mood-rules.md</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ 令牌 ══════════ -->
+<div class="legend">
+  <section>
+    <span class="lbl">色板</span>
+    <div class="swatches">
+      <div class="sw"><i style="background:#08090A"></i><b>#08090A</b><span>页面底</span></div>
+      <div class="sw"><i style="background:#101314"></i><b>#101314</b><span>抬起面</span></div>
+      <div class="sw"><i style="background:#171B1D"></i><b>#171B1D</b><span>点格</span></div>
+      <div class="sw"><i style="background:#232829"></i><b>#232829</b><span>发丝线</span></div>
+      <div class="sw"><i style="background:#E9EDEC"></i><b>#E9EDEC</b><span>主文字 · 微偏绿的白</span></div>
+      <div class="sw"><i style="background:#697375"></i><b>#697375</b><span>标签 · 微偏绿的灰</span></div>
+      <div class="sw"><i style="background:#4ADE80"></i><b>#4ADE80</b><span>只表示 live / 正在播</span></div>
+      <div class="sw"><i style="background:#D9A441"></i><b>#D9A441</b><span>只表示替代版本</span></div>
+    </div>
+  </section>
+
+  <section>
+    <span class="lbl">字体三角色</span>
+    <div class="roles">
+      <div class="role">
+        <span class="demo-dot">Claudio 23:47</span>
+        <span class="why">Doto ROND · 圆点。字标、时钟、姓名 —— 身份与时间。</span>
+      </div>
+      <div class="role">
+        <span class="demo-dot" style="font-size:15px">01 &nbsp; 0:30 &nbsp; 3 TRACKS</span>
+        <span class="why">
+          Doto · 读数层。编号、时长、计数 —— 机器显示给你看的数字。
+          下限 13px，再小点会糊在一起。
+        </span>
+      </div>
+      <div class="role">
+        <span class="demo-mono">On Air · Queue · Peak Hour</span>
+        <span class="why">IBM Plex Mono · 10px · +0.18em。仪器丝印，只做标签不做数字。</span>
+      </div>
+      <div class="role">
+        <span class="demo-sans">那就不上强度了。走神了也不亏。</span>
+        <span class="why">系统黑体。所有中文与句子。</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <span class="lbl">两个判断</span>
+    <div class="roles">
+      <div class="role">
+        <span class="demo-sans">时钟是签名，不是装饰</span>
+        <span class="why">
+          最大的元素不承担任何交互。时间下面那行场景名从 routines.md 读出 ——
+          07:30 显示「通勤」，10:00 显示「深度工作」。别人的 Claudio 上是别的词，抄不走。
+        </span>
+      </div>
+      <div class="role">
+        <span class="demo-sans">点格是像素基底，不是纹理</span>
+        <span class="why">
+          间距锁死 4px，所有间距与定位吸附到同一网格。让界面像画在一块真实
+          LED 面板上，而不是一个用了点状背景的深色主题。
+        </span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+// 时段映射直接对应 routines.md 里的时间表 —— 这是签名元素的数据来源。
+// 真实实现里这一段应该由服务端从语料解析后下发，而不是前端硬编码。
+const ROUTINES = [
+  { from: 7,  to: 9,  name: "通勤"     },
+  { from: 10, to: 12, name: "深度工作" },
+  { from: 18, to: 19, name: "做饭"     },
+  { from: 23, to: 24, name: "深夜"     },
+  { from: 0,  to: 5,  name: "深夜"     },
+];
+const FALLBACK = h =>
+  h < 9 ? "清晨" : h < 12 ? "上午" : h < 14 ? "正午" : h < 18 ? "下午" : "夜晚";
+
+const WEEK = ["周日","周一","周二","周三","周四","周五","周六"];
+const MON  = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+function tick() {
+  const d = new Date();
+  const h = d.getHours();
+  const pad = n => String(n).padStart(2, "0");
+
+  document.getElementById("clock").textContent = `${pad(h)}:${pad(d.getMinutes())}`;
+  document.getElementById("slot").textContent =
+    (ROUTINES.find(r => h >= r.from && h < r.to) || {}).name || FALLBACK(h);
+  document.getElementById("date").textContent =
+    `${WEEK[d.getDay()]} · ${pad(d.getDate())}-${MON[d.getMonth()]}-${d.getFullYear()}`;
+}
+tick();
+setInterval(tick, 10000);
+</script>

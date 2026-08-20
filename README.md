@@ -62,6 +62,14 @@ is something a DJ can actually cite.
 `- 07:00–09:00 commute: …` and the display reads **commute** at 7:30 instead of
 a generic "morning."
 
+## Design
+
+`design/mockup.html` records the visual direction — open it in a browser, the
+clock is live. The short version: the interface's metaphor is **broadcast, not
+chat**. The largest element carries no interaction, tracks are a numbered queue
+under one persistent player, and green means exactly one thing: live.
+See `design/README.md` for the reasoning.
+
 ## Architecture
 
 Four layers.
@@ -219,6 +227,12 @@ Claudio 的全部个性来自 `user/` 下的三个文件。仓库里只有 `*.ex
 
 `routines.md` 还驱动界面上那个时钟 —— 写了 `- 07:00–09:00 通勤：…` 之后，
 早上 7:30 打开时时钟下面显示的是「通勤」，而不是通用的「清晨」。
+
+## 设计
+
+`design/mockup.html` 记录了视觉方向 —— 用浏览器打开，时钟是活的。一句话概括：
+界面的隐喻是**广播，不是聊天**。最大的元素不承担交互，曲目是一条编号队列配一个
+常驻播放器，绿色只意味着一件事：正在播。理由见 `design/README.md`。
 
 ## 架构
 

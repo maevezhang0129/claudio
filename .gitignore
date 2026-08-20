@@ -9,7 +9,8 @@ cache/
 user/*.md
 !user/*.example.md
 
-# 参考截图（他人原创内容），只留本地
-*.PNG
-*.png
-!public/*.png
+.DS_Store
+
+# 第三方参考素材（他人原创内容）——只留本地，绝不提交。
+# diagram/ 下你自己画的架构图不受影响，可以正常提交。
+diagram/reference/

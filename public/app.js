@@ -96,7 +96,33 @@ function loadQueue(tracks) {
   state.index = -1;
   renderQueue();
   els.queueSection.hidden = state.queue.length === 0;
-  if (state.queue.length === 0) els.player.hidden = true;
+
+  if (state.queue.length === 0) {
+    els.player.hidden = true;
+    return;
+  }
+  cue(state.queue[0]);
+}
+
+/**
+ * 把第一首预置进播放器但不播放。
+ * 藏起来的话，页面在你点之前看着就是死的 —— 电台总该显示它的播放器。
+ */
+function cue(t) {
+  els.player.hidden = false;
+  els.player.classList.add("idle");
+  setNowPlaying(t);
+  els.tNow.textContent = "0:00";
+  els.tTotal.textContent = "0:30";
+  els.railFill.style.width = "0";
+  syncTransport();
+}
+
+function setNowPlaying(t) {
+  els.npTitle.replaceChildren(
+    document.createTextNode(t.title),
+    Object.assign(el("em"), { textContent: ` — ${t.artist}` }),
+  );
 }
 
 function renderQueue() {
@@ -153,10 +179,8 @@ function play(i) {
 
   state.index = i;
   els.player.hidden = false;
-  els.npTitle.replaceChildren(
-    document.createTextNode(t.title),
-    Object.assign(el("em"), { textContent: ` — ${t.artist}` }),
-  );
+  els.player.classList.remove("idle");
+  setNowPlaying(t);
   els.audio.src = t.previewUrl;
   els.audio.play().catch(() => {});
   renderQueue();
@@ -175,7 +199,7 @@ function syncTransport() {
   els.toggle.textContent = playing ? "❚❚" : "▶";
   els.eq.classList.toggle("on", playing);
   els.prev.disabled = state.index <= 0;
-  els.next.disabled = state.index < 0 || state.index >= state.queue.length - 1;
+  els.next.disabled = state.queue.length === 0 || state.index >= state.queue.length - 1;
 }
 
 els.toggle.onclick = () => {
@@ -310,7 +334,7 @@ async function ask(text) {
 els.send.onclick = () => ask(els.input.value);
 els.input.onkeydown = (e) => { if (e.key === "Enter") ask(els.input.value); };
 document.addEventListener("click", (e) => {
-  if (e.target.matches(".intro .chip")) ask(e.target.textContent);
+  if (e.target.matches("#quick .chip")) ask(e.target.textContent);
 });
 
 // ─────────────────────────────── 历史恢复

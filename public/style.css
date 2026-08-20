@@ -347,6 +347,22 @@ body {
   align-items: flex-start;
 }
 
+/* 常驻快捷条 —— 横向可滚，窄屏也不换行挤压 */
+.quick {
+  display: flex;
+  gap: calc(var(--pitch) * 2);
+  padding: calc(var(--pitch) * 2) calc(var(--pitch) * 4) 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: none;
+}
+.quick::-webkit-scrollbar { display: none; }
+.quick .chip { flex: none; }
+
+/* 播放器待机态：曲目已就位但还没播，按钮是灰的 */
+.player.idle .np-title { color: var(--ash); }
+.player.idle .eq i { background: var(--line); }
+
 /* ═══ 输入 ═══ */
 .composer {
   position: sticky;

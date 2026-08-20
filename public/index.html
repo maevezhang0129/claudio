@@ -66,17 +66,20 @@
   <div class="feed" id="feed">
     <div class="intro" id="intro">
       <p>跟我说说你现在想听什么 —— 或者只说你此刻的状态。</p>
-      <div class="chips">
-        <button class="chip">随便</button>
-        <button class="chip">有点累</button>
-        <button class="chip">需要专注</button>
-        <button class="chip">想哭</button>
-      </div>
     </div>
   </div>
 
+  <!-- 快捷入口常驻。放在对话流里的话，一有历史就会被冲掉，
+       页面看上去就没有任何可操作的东西了。 -->
+  <div class="quick" id="quick">
+    <button class="chip">随便</button>
+    <button class="chip">有点累</button>
+    <button class="chip">需要专注</button>
+    <button class="chip">想哭</button>
+  </div>
+
   <footer class="composer">
-    <input id="input" type="text" placeholder="Say something to the DJ…" autocomplete="off">
+    <input id="input" type="text" placeholder="跟 DJ 说点什么…" autocomplete="off">
     <button class="send" id="send" aria-label="发送">↑</button>
   </footer>
 </main>

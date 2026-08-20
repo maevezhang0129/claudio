@@ -1,0 +1,15 @@
+node_modules/
+.env
+data/
+cache/
+*.log
+
+# 个人品味语料 —— 含作息等私人信息，不提交。
+# 只提交 *.example.md 模板，clone 下来后 cp 一份即可。
+user/*.md
+!user/*.example.md
+
+# 参考截图（他人原创内容），只留本地
+*.PNG
+*.png
+!public/*.png

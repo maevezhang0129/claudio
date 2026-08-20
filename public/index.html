@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0d">
+<title>Claudio</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <span class="dot" id="dot"></span>
+      <h1>Claudio</h1>
+    </div>
+    <div class="meta" id="meta">连接中…</div>
+  </header>
+
+  <main id="feed">
+    <div class="intro">
+      <p>跟我说说你现在想听什么 —— 或者只说你此刻的状态。</p>
+      <div class="chips">
+        <button class="chip">随便</button>
+        <button class="chip">有点累</button>
+        <button class="chip">需要专注</button>
+        <button class="chip">想哭</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="composer">
+    <input id="input" type="text" placeholder="说点什么…" autocomplete="off">
+    <button id="send" aria-label="发送">↑</button>
+  </footer>
+
+  <audio id="audio"></audio>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+:root {
+  --bg: #0b0b0d;
+  --surface: #141418;
+  --surface-2: #1c1c22;
+  --line: #26262e;
+  --text: #ececf1;
+  --muted: #8b8b98;
+  --accent: #e8813a;
+  --accent-dim: #8a4d22;
+  --ok: #5bbd7a;
+  --warn: #d9a441;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.65 -apple-system, BlinkMacSystemFont, "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ---------- 顶栏 ---------- */
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+}
+.brand { display: flex; align-items: center; gap: 9px; }
+.brand h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background .3s;
+}
+.dot.live { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.dot.busy { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+.dot.err  { background: #d95c5c; }
+@keyframes pulse { 50% { opacity: .35; } }
+.meta { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- 消息流 ---------- */
+#feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 18px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.intro { color: var(--muted); }
+.intro p { margin: 0 0 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--accent-dim); }
+
+.turn-user {
+  align-self: flex-end;
+  max-width: 78%;
+  background: var(--surface-2);
+  border-radius: 16px 16px 4px 16px;
+  padding: 9px 14px;
+}
+
+.turn-dj { display: flex; flex-direction: column; gap: 14px; }
+
+.say {
+  font-size: 16.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.reason {
+  border-left: 2px solid var(--accent-dim);
+  padding-left: 12px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.segue {
+  color: var(--muted);
+  font-size: 13.5px;
+  font-style: italic;
+}
+
+.dropped {
+  font-size: 11.5px;
+  color: var(--warn);
+  opacity: .75;
+}
+
+.err {
+  border: 1px solid #5a2b2b;
+  background: #1d1214;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+}
+
+/* ---------- 曲目卡片 ---------- */
+.tracks { display: flex; flex-direction: column; gap: 8px; }
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color .18s, background .18s;
+}
+.track:hover { border-color: var(--accent-dim); background: var(--surface-2); }
+.track.playing { border-color: var(--accent); }
+
+.art {
+  width: 52px; height: 52px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--surface-2);
+  flex: none;
+}
+
+.track-info { min-width: 0; flex: 1; }
+.track-title {
+  font-size: 14.5px;
+  font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.track-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.track-note {
+  font-size: 11.5px;
+  color: var(--warn);
+  margin-top: 2px;
+}
+
+/* alternate：排在分隔线之下，整体压暗，不与精确匹配抢注意力 */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 2px 2px;
+  font-size: 11.5px;
+  color: var(--muted);
+  opacity: .7;
+}
+.divider::before, .divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.track.alt { opacity: .62; }
+.track.alt:hover, .track.alt.playing { opacity: 1; }
+.track.alt .art { filter: saturate(.55); }
+.track.alt:hover .art, .track.alt.playing .art { filter: none; }
+
+.play-btn {
+  flex: none;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.track.playing .play-btn { border-color: var(--accent); color: var(--accent); }
+
+.bar-progress {
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+  margin-top: 6px;
+  width: 0;
+  transition: width .25s linear;
+}
+
+/* ---------- 输入区 ---------- */
+.composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 9px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(12px);
+}
+#input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  padding: 11px 17px;
+  font-size: 15px;
+  outline: none;
+}
+#input:focus { border-color: var(--accent-dim); }
+#send {
+  width: 42px; height: 42px;
+  flex: none;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #14100c;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+#send:disabled { opacity: .4; cursor: default; }

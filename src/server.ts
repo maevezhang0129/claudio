@@ -30,7 +30,14 @@ const brain = createBrain({
   kind: config.brainKind,
   model: config.model,
   apiKey: config.apiKey,
+  compatApiKey: config.compatApiKey,
+  baseURL: config.compatBaseURL,
 });
+
+/** 当前大脑是否已具备调用条件 —— 缺 key 时前端要给出可操作的提示 */
+const brainReady =
+  config.brainKind === "stub" ||
+  (config.brainKind === "claude" ? Boolean(config.apiKey) : Boolean(config.compatApiKey));
 
 /**
  * 一次回复里最多保留几首 alternate（曲名对上、艺人不同）。
@@ -53,7 +60,7 @@ app.get("/api/health", async () => ({
   model: brain.model,
   musicProvider: music.name,
   capabilities: music.capabilities,
-  hasApiKey: Boolean(config.apiKey) || config.brainKind === "stub",
+  hasApiKey: brainReady,
 }));
 
 /** 直接搜歌，不经过大脑 —— 图一第二层 router.js 里「简单指令走直连」那条 */
@@ -70,11 +77,13 @@ app.post<{ Body: { message?: string; session?: string } }>(
     const session = req.body?.session ?? "default";
     if (!message) return reply.code(400).send({ error: "message 不能为空" });
 
-    if (!config.apiKey && config.brainKind !== "stub") {
+    if (!brainReady) {
       return reply.code(503).send({
-        error:
-          "没有配置 ANTHROPIC_API_KEY。注意这跟 Claude Pro/Max 订阅是两套账，" +
-          "需要在 console.anthropic.com 单独充值后拿 key，写进 .env。",
+        error: config.brainKind === "claude"
+          ? "没有配置 ANTHROPIC_API_KEY。注意这跟 Claude Pro/Max 订阅是两套账，" +
+            "需要在 console.anthropic.com 单独充值后拿 key，写进 .env。"
+          : `没有配置 ${config.brainKind.toUpperCase()}_API_KEY，写进 .env 即可。` +
+            "GLM 在 bigmodel.cn 申请，glm-4.7-flash 档位免费。",
       });
     }
 
@@ -209,7 +218,7 @@ console.log(`
   本机     http://localhost:${config.port}${lan ? `
   手机     ${lan}   （连同一 WiFi）` : ""}
 
-  大脑     ${brain.model}${config.brainKind === "stub" || config.apiKey ? "" : "   ⚠️  未配置 ANTHROPIC_API_KEY"}
+  大脑     ${brain.name} · ${brain.model}${brainReady ? "" : "   ⚠️  缺少 API key"}
   音源     ${music.name}（storefront=${config.itunesStorefront}）
   能力     试听=${music.capabilities.preview ? "✓" : "✗"}  整曲=${music.capabilities.fullPlayback ? "✓" : "✗"}  资料库=${music.capabilities.userLibrary ? "✓" : "✗"}
   语料     user/*.md

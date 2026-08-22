@@ -63,7 +63,7 @@ const SCRIPTS: Array<{ match: RegExp; make: () => DJResponse }> = [
 
 export class StubBrain implements BrainAdapter {
   readonly name = "stub";
-  readonly model = "stub（离线，不花钱）";
+  readonly model = "离线剧本（不花钱）";
 
   async think(req: BrainRequest): Promise<BrainResult> {
     // 模拟一点网络延迟，让前端的 loading 状态能被看见

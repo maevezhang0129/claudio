@@ -20,12 +20,20 @@ export const config = {
   rootDir: ROOT_DIR,
   port: Number(process.env.PORT ?? 8080),
 
-  /** 大脑实现："claude" 走 API 花钱，"stub" 离线不花钱 */
+  /** 大脑实现：claude | stub | glm | deepseek | kimi */
   brainKind: process.env.CLAUDIO_BRAIN ?? "claude",
 
   /** 大脑档位。默认最便宜的 Haiku 4.5 */
   model: process.env.CLAUDIO_MODEL ?? "claude-haiku-4-5",
   apiKey: process.env.ANTHROPIC_API_KEY,
+
+  /** OpenAI 兼容端点的 key。按 brainKind 取对应的那一个 */
+  compatApiKey:
+    process.env.GLM_API_KEY ??
+    process.env.DEEPSEEK_API_KEY ??
+    process.env.KIMI_API_KEY,
+  /** 覆盖端点地址，用于自建代理或换区 */
+  compatBaseURL: process.env.CLAUDIO_BASE_URL,
 
   /** 音源 provider */
   musicProvider: (process.env.CLAUDIO_MUSIC_PROVIDER ?? "itunes") as

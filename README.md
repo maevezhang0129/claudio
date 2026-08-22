@@ -155,20 +155,30 @@ is capped at one client ID and five authorized users.
 
 ## Brain
 
-Swap tiers with `CLAUDIO_MODEL`; `CLAUDIO_BRAIN=stub` runs offline for free.
+`CLAUDIO_BRAIN` picks the provider, `CLAUDIO_MODEL` the tier. `stub` runs
+offline for free.
 
-| Model | Price (per 1M in/out) | ~20 turns/day |
+| Provider | Tier | ~20 turns/day |
 |---|---|---|
-| `claude-haiku-4-5` | $1 / $5 | ~$3/mo |
-| `claude-sonnet-5` | $3 / $15 | ~$10/mo |
-| `claude-opus-5` | $5 / $25 | ~$16/mo |
+| `glm` | `glm-4.7-flash` | **free** — 200K context, no card needed |
+| `glm` | `glm-4.7-flashx` | ~¥2/mo |
+| `glm` | `glm-4.5-air` | ~¥4/mo |
+| `deepseek` | `deepseek-chat` | ~¥8/mo |
+| `claude` | `claude-haiku-4-5` | ~¥20/mo |
+| `claude` | `claude-sonnet-5` | ~¥70/mo |
 
-Cheaper models fabricate more tracks — but fabrications get caught by `resolve()`,
-so the failure mode is "fewer recommendations," never "fake recommendations."
-Watch the `dropped` counter in the UI; it is a direct measure of hallucination rate.
+Start on `glm-4.7-flash`: it costs nothing, so there is no reason not to measure
+before paying. Cheaper models fabricate more tracks — but fabrications get caught
+by `resolve()`, so the failure mode is "fewer recommendations," never "fake
+recommendations." Watch the `dropped` counter in the UI; it is a direct measure
+of hallucination rate, and the honest way to decide whether a paid tier earns its
+price.
 
-To use GLM / DeepSeek / Kimi: implement `BrainAdapter`, add a case in
-`src/brain/index.ts`. Nothing above the factory changes.
+GLM, DeepSeek and Kimi share one implementation (`src/brain/openai-compat.ts`)
+because all three speak the OpenAI chat format. It asks for `json_object` mode,
+restates the schema in the prompt, validates the reply with Zod, and retries once
+with the validation error fed back — none of those providers guarantee strict
+`json_schema`, so the client cannot assume the response is well-formed.
 
 ## Roadmap
 
@@ -315,19 +325,26 @@ Premium 订阅，且 Development Mode 限 1 个 Client ID、5 个授权用户。
 
 ## 大脑
 
-`CLAUDIO_MODEL` 换档位，`CLAUDIO_BRAIN=stub` 离线免费。
+`CLAUDIO_BRAIN` 选厂商，`CLAUDIO_MODEL` 选档位，`stub` 离线免费。
 
-| 模型 | 单价（每百万 in/out） | 约 20 轮/天 |
+| 厂商 | 档位 | 约 20 轮/天 |
 |---|---|---|
-| `claude-haiku-4-5` | $1 / $5 | ~$3/月 |
-| `claude-sonnet-5` | $3 / $15 | ~$10/月 |
-| `claude-opus-5` | $5 / $25 | ~$16/月 |
+| `glm` | `glm-4.7-flash` | **免费** —— 200K 上下文，不用绑卡 |
+| `glm` | `glm-4.7-flashx` | ~¥2/月 |
+| `glm` | `glm-4.5-air` | ~¥4/月 |
+| `deepseek` | `deepseek-chat` | ~¥8/月 |
+| `claude` | `claude-haiku-4-5` | ~¥20/月 |
+| `claude` | `claude-sonnet-5` | ~¥70/月 |
 
-越便宜的模型越容易编歌 —— 但编的会被 `resolve()` 拦掉，所以失败表现是
-「推荐变少」，绝不会是「推荐了假歌」。界面上的 `dropped` 计数就是幻觉率的直接度量。
+**从 `glm-4.7-flash` 起步** —— 它不花钱，所以没有理由在付费之前不先测一测。
+越便宜的模型越容易编歌，但编的会被 `resolve()` 拦掉，失败表现是「推荐变少」，
+绝不会是「推荐了假歌」。界面上的 `dropped` 计数就是幻觉率的直接度量，
+也是判断某个付费档值不值这个钱的唯一诚实依据。
 
-想用 GLM / DeepSeek / Kimi：实现 `BrainAdapter` 接口，在 `src/brain/index.ts`
-加一个 case，工厂以上的代码一行不用改。
+GLM / DeepSeek / Kimi 共用一个实现（`src/brain/openai-compat.ts`），因为三家
+都讲 OpenAI 的 chat 格式。它要求 `json_object` 模式、在提示词里重述 schema、
+用 Zod 校验、失败时把错误回灌重试一次 —— 这三家都不保证严格 `json_schema`，
+客户端不能假设返回一定合规。
 
 ## 路线
 

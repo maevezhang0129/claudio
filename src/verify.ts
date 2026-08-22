@@ -150,8 +150,17 @@ const checks: [string, boolean][] = [
   ["exact 全部排在 alternate 之前",
     ordered.findIndex((t) => altOnly.includes(t)) === -1 ||
     ordered.findIndex((t) => altOnly.includes(t)) >= exactOnly.length],
-  ["exact 保持模型原始顺序",
-    exactOnly[0]?.title === "富士山下" && exactOnly[1]?.title === "海阔天空"],
+  // 断言「顺序」而不是「曲名字符串」。
+  // 硬编码 title 会因为曲库变动而假失败 —— Apple Music 的
+  //「海阔天空」首位结果一度变成《海阔天空 (大马版28/05/93) [Live]》，
+  // 匹配逻辑正确判定为 exact，但返回的 title 带上了现场版修饰。
+  ["exact 保持模型原始顺序", (() => {
+    const wanted = r1.response.play
+      .map((q) => normalize(q.title))
+      .filter((t) => exactOnly.some((e) => normalize(e.title) === t));
+    const got = exactOnly.map((e) => normalize(e.title));
+    return wanted.length === got.length && wanted.every((t, i) => t === got[i]);
+  })()],
   // 模板里的 <!-- --> 是写给用户看的填写指引。漏进 prompt 的话，
   // 模型会把「✗ 没用：喜欢周杰伦」这种示范当成用户的真实偏好。
   ["语料剥离了模板指引注释",

@@ -122,8 +122,34 @@ export class OpenAICompatBrain implements BrainAdapter {
     this.model = opts.model || this.preset.defaultModel;
     this.baseURL = opts.baseURL || this.preset.baseURL;
     this.apiKey = opts.apiKey;
-    this.maxTokens = opts.maxTokens ?? 2048;
-    this.timeoutMs = opts.timeoutMs ?? 60_000;
+    // GLM-4.7 系列默认开思考模式，推理会先吃掉输出预算。
+    // 给小了会出现 content 为空、token 却烧光的情况。
+    this.maxTokens = opts.maxTokens ?? 4096;
+    // 实测 GLM 免费档成功时要 30–53 秒，60 秒会误杀
+    this.timeoutMs = opts.timeoutMs ?? 120_000;
+  }
+
+  /**
+   * 限流时退避重试。
+   * GLM 免费档共享容量，1302（账户速率）和 1305（模型拥挤）都很常见，
+   * 不退避的话一轮对话基本必挂。
+   */
+  private async callWithBackoff(
+    messages: Array<{ role: string; content: string }>,
+  ): Promise<ChatResponse> {
+    const delays = [2000, 6000, 15000];
+    let last: Error | undefined;
+    for (let i = 0; i <= delays.length; i++) {
+      try {
+        return await this.call(messages);
+      } catch (err) {
+        last = err as Error;
+        const retryable = /429|1302|1305|限速|速率限制|访问量过大|timeout|aborted/i.test(last.message);
+        if (!retryable || i === delays.length) throw last;
+        await new Promise((r) => setTimeout(r, delays[i]!));
+      }
+    }
+    throw last!;
   }
 
   private async call(messages: Array<{ role: string; content: string }>): Promise<ChatResponse> {
@@ -196,8 +222,17 @@ export class OpenAICompatBrain implements BrainAdapter {
 
     // 两次机会：第二次把校验错误回灌，让模型自己改
     for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
-      response = await this.call(messages);
+      response = await this.callWithBackoff(messages);
       const raw = response.choices?.[0]?.message?.content ?? "";
+      if (!raw.trim()) {
+        // 思考模式把输出预算吃光时会走到这里
+        lastError = "返回内容为空（输出预算可能被推理占满，调大 maxTokens）";
+        messages.push({
+          role: "user",
+          content: "上一条回复是空的。请直接输出 JSON，不要在输出里做推理。",
+        });
+        continue;
+      }
 
       try {
         const result = DJResponseSchema.safeParse(this.extractJson(raw));

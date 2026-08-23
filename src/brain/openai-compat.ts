@@ -24,6 +24,13 @@ export type CompatProvider = "glm" | "deepseek" | "kimi";
 interface ProviderPreset {
   baseURL: string;
   defaultModel: string;
+  /**
+   * 关闭思考模式的请求字段。
+   * GLM-4.7 系列默认开推理，推理会先吃掉输出预算 —— 实测让它回「收到」两个字，
+   * 默认配置烧掉 100 个输出 token 且 content 为空，关掉后只烧 2 个。
+   * 我们要的是结构化 JSON，不需要它在输出里想。
+   */
+  noThinking?: Record<string, unknown>;
   /** 每百万 token 单价（人民币）。免费档写 0。 */
   pricing: Record<string, { in: number; out: number }>;
   /** 人民币转美元，只为了和 Claude 档位在同一个刻度上显示 */
@@ -34,6 +41,7 @@ const PRESETS: Record<CompatProvider, ProviderPreset> = {
   glm: {
     baseURL: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     defaultModel: "glm-4.7-flash",
+    noThinking: { thinking: { type: "disabled" } },
     pricing: {
       "glm-4.7-flash": { in: 0, out: 0 },      // 官方定价表标注免费
       "glm-4.7-flashx": { in: 0.5, out: 3 },
@@ -166,6 +174,7 @@ export class OpenAICompatBrain implements BrainAdapter {
         temperature: 0.8,
         // 对端不支持时通常是忽略而不是报错；提示词里也描述了 schema，双保险
         response_format: { type: "json_object" },
+        ...this.preset.noThinking,
       }),
       signal: AbortSignal.timeout(this.timeoutMs),
     });

@@ -11,7 +11,8 @@
     "verify": "node src/verify.ts",
     "typecheck": "tsc --noEmit",
     "export:apple": "node scripts/export-apple-music.mjs",
-    "ingest": "node scripts/ingest.mjs"
+    "ingest": "node scripts/ingest.mjs",
+    "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",

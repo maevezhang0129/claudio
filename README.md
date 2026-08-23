@@ -158,17 +158,25 @@ is capped at one client ID and five authorized users.
 `CLAUDIO_BRAIN` picks the provider, `CLAUDIO_MODEL` the tier. `stub` runs
 offline for free.
 
-| Provider | Tier | ~20 turns/day |
-|---|---|---|
-| `glm` | `glm-4.7-flash` | **free** — 200K context, no card needed |
-| `glm` | `glm-4.7-flashx` | ~¥2/mo |
-| `glm` | `glm-4.5-air` | ~¥4/mo |
-| `deepseek` | `deepseek-chat` | ~¥8/mo |
-| `claude` | `claude-haiku-4-5` | ~¥20/mo |
-| `claude` | `claude-sonnet-5` | ~¥70/mo |
+Measured over six turns each, same prompts, tracks resolved against the catalog
+so the hallucination figure is real rather than eyeballed:
 
-Start on `glm-4.7-flash`: it costs nothing, so there is no reason not to measure
-before paying. Cheaper models fabricate more tracks — but fabrications get caught
+| Tier | Median | Exact match | Hallucinated | Per turn |
+|---|---|---|---|---|
+| **`glm-4.5-air`** (default) | **5.3s** | **94%** | 6% | $0.00055 |
+| `glm-4.7-flashx` | 28.6–63.9s | 82% | 0% | $0.00033 |
+| `glm-4.7` | 10.8s | 87% | 7% | $0.00180 |
+| `glm-4.7-flash` | 30–53s, 1-in-5 succeed | — | — | free |
+
+`glm-4.5-air` wins on both speed and accuracy for about ¥1/month more than the
+cheapest usable tier. `flashx` posts a 0% hallucination rate but 18% alternates —
+right title, wrong artist — which is worse than nothing, because it looks like a
+success. Avoid `glm-4.7-flash`: nominally free, but it runs on shared capacity
+and is too slow and too congested for an interactive interface.
+
+Zhipu gives new accounts 25M tokens, which covers the paid tiers. At ~3,300
+tokens a turn that is roughly a year at 20 turns a day, so there is no reason to
+top up before measuring. Cheaper models fabricate more tracks — but fabrications get caught
 by `resolve()`, so the failure mode is "fewer recommendations," never "fake
 recommendations." Watch the `dropped` counter in the UI; it is a direct measure
 of hallucination rate, and the honest way to decide whether a paid tier earns its
@@ -327,16 +335,22 @@ Premium 订阅，且 Development Mode 限 1 个 Client ID、5 个授权用户。
 
 `CLAUDIO_BRAIN` 选厂商，`CLAUDIO_MODEL` 选档位，`stub` 离线免费。
 
-| 厂商 | 档位 | 约 20 轮/天 |
-|---|---|---|
-| `glm` | `glm-4.7-flash` | **免费** —— 200K 上下文，不用绑卡 |
-| `glm` | `glm-4.7-flashx` | ~¥2/月 |
-| `glm` | `glm-4.5-air` | ~¥4/月 |
-| `deepseek` | `deepseek-chat` | ~¥8/月 |
-| `claude` | `claude-haiku-4-5` | ~¥20/月 |
-| `claude` | `claude-sonnet-5` | ~¥70/月 |
+每档各跑 6 轮相同提示词，曲目全部送去曲库解析，所以幻觉率是实测不是目测：
 
-**从 `glm-4.7-flash` 起步** —— 它不花钱，所以没有理由在付费之前不先测一测。
+| 档位 | 中位耗时 | 精确匹配 | 幻觉 | 每轮 |
+|---|---|---|---|---|
+| **`glm-4.5-air`**（默认） | **5.3s** | **94%** | 6% | $0.00055 |
+| `glm-4.7-flashx` | 28.6–63.9s | 82% | 0% | $0.00033 |
+| `glm-4.7` | 10.8s | 87% | 7% | $0.00180 |
+| `glm-4.7-flash` | 30–53s，成功率 1/5 | — | — | 免费 |
+
+`glm-4.5-air` 速度和准确率都最好，每月只比最便宜的可用档多约 ¥1。
+`flashx` 幻觉率 0% 看着漂亮，但有 18% 的 alternate —— 曲名对、艺人不对 ——
+那比直接编还糟，因为它看起来像成功了。
+别用 `glm-4.7-flash`：名义免费，但走共享容量，对交互界面来说太慢也太挤。
+
+智谱给新账号 2500 万 token，可用于付费档。按每轮约 3300 token 算，
+20 轮/天够用一年左右 —— 所以没必要在测够之前就充值。
 越便宜的模型越容易编歌，但编的会被 `resolve()` 拦掉，失败表现是「推荐变少」，
 绝不会是「推荐了假歌」。界面上的 `dropped` 计数就是幻觉率的直接度量，
 也是判断某个付费档值不值这个钱的唯一诚实依据。

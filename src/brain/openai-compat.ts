@@ -40,7 +40,10 @@ interface ProviderPreset {
 const PRESETS: Record<CompatProvider, ProviderPreset> = {
   glm: {
     baseURL: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    defaultModel: "glm-4.7-flash",
+    // 不用 glm-4.7-flash：它虽然免费，但走的是共享容量，
+    // 实测成功率 1/5、耗时 30–53 秒，交互式聊天用不了。
+    // 新用户的 2500 万免费额度可以用来调付费模型，那才是划算的组合。
+    defaultModel: "glm-4.5-air",
     noThinking: { thinking: { type: "disabled" } },
     pricing: {
       "glm-4.7-flash": { in: 0, out: 0 },      // 官方定价表标注免费

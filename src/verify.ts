@@ -138,19 +138,47 @@ for (const [a, b, want] of simCases) {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${score.toFixed(3)} ${got ? "通过" : "拒绝"}  ${a} <-> ${b}`);
 }
 
-// ---- alternate 路径的长度比闸门 ----
+// ---- 归一化不能吃掉正文 ----
+// normalize 会剥掉 (Live)、feat. 这类修饰。剥过头比不剥更危险 ——
+// 曾经 /\s*(feat|ft)\s+/ 里的 \s* 让「Soft Spot」里的 ft 被当成合唱标记，
+// 整首歌被截成「So」，于是它和任何以 so 开头的歌都完全相同。
+// 那是这个库里播放次数第二高的曲目。
+console.log("\n── 归一化边界 ──");
+const normCases: Array<[string, string]> = [
+  ["Soft Spot", "softspot"],                    // ft 在词中间，不是合唱标记
+  ["Drift Away", "driftaway"],
+  ["Left Behind", "leftbehind"],
+  ["我和我的祖国", "我和我的祖国"],               // 「和」是常用字，后面没空白就不是分隔符
+  ["Song feat. Someone", "song"],               // 这个才是真的合唱标记
+  ["Skrr (feat. GISELLE)", "skrr"],
+  ["晴天 (Live)", "晴天"],
+  ["Bohemian Rhapsody - Remastered 2011", "bohemianrhapsody"],
+];
+let normFailed = 0;
+for (const [input, want] of normCases) {
+  const got = normalize(input);
+  const ok = got === want;
+  if (!ok) normFailed++;
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${JSON.stringify(input)} -> ${JSON.stringify(got)}` +
+    (ok ? "" : `  期望 ${JSON.stringify(want)}`));
+}
+
+// ---- 曲名长度比闸门 ----
 // 相似度阈值单独守不住包含式匹配：编造的曲名只要「套」着一个真实曲名，
-// 就能拿到 0.8 以上。艺人对不上时必须再过一道长度比。
-// 这几条是接网易云时暴露出来的 —— 它的搜索比 iTunes 松得多，
-// 「永夜的第七章序曲」真的能召回「夜的第七章」。
-console.log("\n── alternate 长度比闸门 ──");
+// 就能拿到 0.72 以上。两趟匹配都要再过一道长度比。
+// 一开始只装在 alternate 那条路上，实测发现模型编的往往是
+// **真艺人 + 加了料的曲名** —— 那种情况艺人对得上，从第一趟就走过去了。
+console.log("\n── 曲名长度比闸门 ──");
 const ALT_FLOOR = 0.8;
 const altCases: Array<[string, string, boolean]> = [
   ["起风了", "起风了", true],                          // 跨平台艺名不一致的真实场景
   ["告白气球", "告白氣球", true],                       // 繁简，长度相等
   ["晴天", "晴天 (Live)", true],                        // 修饰词会被 normalize 剥掉
+  ["七里香", "七里香 (电视剧主题曲)", true],
   ["永夜的第七章序曲", "夜的第七章", false],             // 套着真实曲名的幻觉
   ["夜的第七章前奏曲", "夜的第七章", false],
+  ["Soft Spot in the Rain", "Soft Spot", false],       // 真艺人 + 加了料的曲名
+  ["宇宙漫游第二章", "宇宙漫游", false],
 ];
 let altFailed = 0;
 for (const [a, b, want] of altCases) {
@@ -215,6 +243,6 @@ rmSync(TMP_DB, { force: true });
 rmSync(TMP_DB + "-wal", { force: true });
 rmSync(TMP_DB + "-shm", { force: true });
 
-failed += altFailed;
+failed += altFailed + normFailed;
 console.log(failed === 0 ? "\n全部通过" : `\n${failed} 项失败`);
 process.exit(failed === 0 ? 0 : 1);

@@ -4,7 +4,13 @@
 const DECORATIONS = [
   /[（(\[【][^）)\]】]*[）)\]】]/g, // (Live) （现场） [Remastered]
   /\s+-\s+(live|remaster(ed)?|single|radio edit|explicit|instrumental).*$/i,
-  /\s*(feat\.?|ft\.?|featuring|与|和)\s+.+$/i,
+  // 英文合唱标记。前面**必须**有空白 —— 写成 \s* 的话，
+  // 「Soft Spot」里的 ft 会被当成 featuring，整首歌被截成「So」。
+  // 这不是假设：那是这个库里播放次数第二高的曲目。
+  /\s+(feat\.?|ft\.?|featuring)\s+.+$/i,
+  // 中文合唱标记。后面必须有空白 —— 否则「我和我的祖国」会被截成「我」，
+  // 「和」是常用字，不能一见到就当分隔符。
+  /\s*(与|和)\s+.+$/,
 ];
 
 /** 全角 → 半角 */

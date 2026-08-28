@@ -31,14 +31,21 @@ const TITLE_THRESHOLD = 0.72;
 const ARTIST_THRESHOLD = 0.55;
 
 /**
- * 第二趟（没有艺人佐证）额外要求的长度比下限。
+ * 曲名长度比下限 —— 包含式匹配的闸门，两趟都生效。
  *
- * 只在 alternate 那条路上生效：艺人对上时，「晴天」→「晴天 (Live)」
- * 这种包含式匹配是可信的；艺人对不上时它就是幻觉的主要入口。
- * 0.8 是让繁简差异（长度相等，比值 1.0）安全通过、
- * 而「永夜的第七章序曲」→「夜的第七章」（0.625）被拦下的分界。
+ * 相似度单独拦不住「一个编造的曲名裹着一个真实曲名」：
+ * 「Soft Spot in the Rain」包含真实的「Soft Spot」，能拿到 0.735；
+ * 「永夜的第七章序曲」包含「夜的第七章」，能拿到 0.81 —— 都越过了 0.72。
+ *
+ * 一开始只装在 alternate 那条路上，理由是「艺人对上时包含是可信的」。
+ * 那个判断是错的：模型编的往往正是**真艺人 + 加了料的曲名**，
+ * 那种情况艺人当然对得上，于是从第一趟大摇大摆地走了过去。
+ *
+ * 0.8 这个值让真实的修饰词安全通过 —— 「晴天 (Live)」「七里香 (电视剧主题曲)」
+ * 的括号部分会先被 normalize 剥掉，比值是 1.0；繁简差异也等长。
+ * 而被额外的词裹起来的曲名比值在 0.5–0.63 之间，过不去。
  */
-const ALT_LENGTH_FLOOR = 0.8;
+const TITLE_LENGTH_FLOOR = 0.8;
 
 /**
  * 能播的加分。量级是刻意压小的：
@@ -185,7 +192,7 @@ export class NeteaseProvider implements MusicProvider {
         const gotTitle = normalize(t.title);
         const titleScore = similarity(wantTitle, gotTitle);
         if (titleScore < TITLE_THRESHOLD) continue;
-        if (!requireArtist && lengthRatio(wantTitle, gotTitle) < ALT_LENGTH_FLOOR) continue;
+        if (lengthRatio(wantTitle, gotTitle) < TITLE_LENGTH_FLOOR) continue;
         const artistScore = similarity(wantArtist, normalize(t.artist));
         if (requireArtist && artistScore < ARTIST_THRESHOLD) continue;
         // 曲名权重更高：艺人字段常含合唱者，噪声比曲名大

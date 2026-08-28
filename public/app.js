@@ -38,6 +38,7 @@ const state = {
   model: "",
   clockOffset: 0,   // 服务端时间 - 本地时间
   segue: "",        // 本轮的过渡语，等整组播完再念
+  onAirSlot: null,  // 当前正在播出的档名，用来识别换档
 };
 
 // ─────────────────────────────── 工具
@@ -91,15 +92,55 @@ async function api(path, opts) {
 
 async function syncClock() {
   try {
-    const { epoch, slot } = await api("/api/now");
+    const { epoch, slot, onAir, plan } = await api("/api/now");
     state.clockOffset = epoch - Date.now();
     els.slot.textContent = slot.name;
     // 场景名来自用户语料时才标注来源 —— 兜底时段不值得声张
     els.slotSrc.textContent =
       slot.source === "routines.md" ? `场景取自 routines.md · ${slot.range ?? ""}` : "";
+    handoff(onAir, plan);
   } catch {
     els.slotSrc.textContent = "";
   }
+}
+
+/**
+ * 换档。
+ *
+ * 服务端每分钟判定一次现在属于哪一档，这里只负责认出「档名变了」。
+ * 变了且那一档有排好的节目单，就把队列换成它。
+ *
+ * 换队列不等于开始播：浏览器本来就不允许无手势自动播放，
+ * 而且正在听的东西被时钟打断也很粗暴。所以只做到「预置好、等你按」——
+ * 正在播的时候连预置都不做，只在对话流里留一行提示。
+ */
+function handoff(onAir, plan) {
+  if (!onAir) return;
+  const first = state.onAirSlot === null;
+  if (onAir.slot === state.onAirSlot) return;
+  state.onAirSlot = onAir.slot;
+  if (first || !plan?.tracks?.length) return;
+
+  const playing = !els.audio.paused && state.index >= 0;
+  if (playing) {
+    addSlotNotice(onAir.slot, plan);
+    return;
+  }
+  loadQueue(plan.tracks);
+  setStatus("live", `${onAir.slot} · 节目单已就绪`);
+  addSlotNotice(onAir.slot, plan);
+}
+
+/** 对话流里留一行「这一档开播了」，点一下可以手动切过去 */
+function addSlotNotice(slot, plan) {
+  const row = el("div", "rule");
+  row.append(el("span", "lbl", `${slot} 开播 · ${plan.tracks.length} 首`));
+  const btn = el("button", "chip", "载入这一档");
+  btn.type = "button";
+  btn.onclick = () => { loadQueue(plan.tracks); scroll(); };
+  row.append(btn);
+  els.feed.append(row);
+  scroll();
 }
 
 const WEEK = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];

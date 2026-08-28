@@ -19,6 +19,7 @@ import { createMusicProvider } from "./music/index.ts";
 import type { ResolveResult, Track } from "./music/types.ts";
 import { Store } from "./state/store.ts";
 import { buildPlan, today } from "./schedule/planner.ts";
+import { Ticker } from "./schedule/ticker.ts";
 import { cast, discover, stop as castStop, transportInfo } from "./cast/upnp.ts";
 import type { Device } from "./cast/upnp.ts";
 import { readFile } from "node:fs/promises";
@@ -212,7 +213,13 @@ app.delete<{ Params: { id: string } }>("/api/session/:id", async (req) => {
 app.get("/api/now", async () => {
   const now = new Date();
   const slot = await currentSlot(config.rootDir, now);
-  return { epoch: now.getTime(), slot };
+  const air = ticker.onAir;
+  // 这一档有节目单就一并带上 —— 前端每分钟本来就要拉这个接口，
+  // 换档时不必再多发一次请求就能把队列换掉。
+  const plan = air?.hasPlan
+    ? (store.planForDay(today()).find((p) => p.slot === air.slot)?.payload ?? null)
+    : null;
+  return { epoch: now.getTime(), slot, onAir: air, plan };
 });
 
 /** 资料页：语料 + 从 plays 表算出来的数字 */
@@ -386,6 +393,23 @@ function lanUrl(scheme: string, port: number): string | null {
   }
   return null;
 }
+
+/**
+ * 时段触发器。它只负责「到点了，换这一档」——
+ * 排期要花钱，绝不由时钟触发。
+ */
+const ticker = new Ticker({
+  rootDir: config.rootDir,
+  store,
+  onChange: (next, prev) => {
+    const when = new Date(next.since).toLocaleTimeString("zh-CN", { hour12: false });
+    console.log(
+      `  ${when}  换档${prev ? ` ${prev.slot} →` : ""} ${next.slot}` +
+        `　${next.hasPlan ? "节目单已就绪" : "这一档还没排期"}`,
+    );
+  },
+});
+await ticker.start();
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
 const scheme = tls ? "https" : "http";

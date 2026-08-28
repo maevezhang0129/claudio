@@ -7,7 +7,7 @@ to you like a late-night DJ.
 Not a recommendation algorithm — a prompt assembler plus a thin layer of API glue.
 All the intelligence lives in the corpus you write; the code just keeps it honest.
 
-**Status: stage ① — conversational recommendation with 30-second previews, zero music-source cost.**
+**Status: stage ③ — full-track playback, a daily schedule, spoken announcements, and casting to a DLNA device.**
 
 [中文说明见下方](#claudio-中文说明)
 
@@ -27,13 +27,17 @@ npm run dev:stub
 # Live mode — needs a model API key
 cp .env.example .env
 npm run dev
+
+# Sign a local TLS cert so the phone gets a secure context (needed to install the PWA)
+brew install mkcert && mkcert -install    # once per machine, asks for your password
+npm run certs                             # re-run whenever your LAN IP changes
 ```
 
-Open http://localhost:8080. The startup banner also prints a LAN address so you
+Open https://localhost:8080. The startup banner also prints a LAN address so you
 can reach it from your phone on the same Wi-Fi.
 
 ```bash
-npm run verify      # 11 pipeline assertions + 8 similarity edge cases — costs nothing
+npm run verify      # 18 pipeline assertions + 13 similarity edge cases — costs nothing
 npm run typecheck
 ```
 
@@ -95,7 +99,7 @@ See `design/README.md` for the reasoning.
 Four layers.
 
 ```
-① External context   user/*.md · model API · iTunes Search API
+① External context   user/*.md · model API · music API · Open-Meteo · Calendar.app
 ② Local brain        server.ts · context/ · brain/ · music/ · state/
 ③ Runtime assembly   six fragments glued into one prompt per turn
 ④ Surface            PWA (localhost:8080) + HTTP contract
@@ -106,9 +110,9 @@ Four layers.
 ```
 ① System prompt      src/prompts/dj-persona.md   ┐ stable group
 ② User corpus        user/*.md                   ┘ cache breakpoint → billed at 1/10
-③ Environment        time (weather/calendar TBD) ┐
+③ Environment        time · weather · calendar  ┐
 ④ Retrieved memory   state.db · plays            │ volatile — changes every turn
-⑥ Execution trace    scheduler/webhook (stage ③) ┘
+⑥ Execution trace    the scheduler, when it fires┘
 ⑤ User input         goes through messages
         ↓
   model → {say, play[], reason, segue}
@@ -142,12 +146,50 @@ Pluggable via `CLAUDIO_MUSIC_PROVIDER`.
 | Provider | Status | Cost | Capabilities |
 |---|---|---|---|
 | `itunes` | ✅ implemented | free, no auth | search validation · artwork · 30s preview |
-| `applemusic` | stage ② | $99/yr Developer Program + your Apple Music subscription | full playback |
-| `netease` | stage ② alternative | free, self-hosted | best Mandarin catalog, unstable API |
+| `netease` | ✅ implemented | free, self-hosted | best Mandarin catalog · full tracks **with a logged-in cookie** |
+| `applemusic` | not implemented | $99/yr Developer Program + your Apple Music subscription | full playback |
 
 iTunes is the right starting point because the `trackId` it returns **is** the
-Apple Music catalog ID — the matching logic carries over unchanged when you
+Apple Music catalog ID — the matching logic carries over unchanged if you ever
 upgrade to MusicKit.
+
+### NetEase: read the cookie note before you switch
+
+```bash
+npm run netease:api     # starts a self-hosted NeteaseCloudMusicApi on :3000
+CLAUDIO_MUSIC_PROVIDER=netease npm run dev
+```
+
+Search and metadata work fine anonymously, and the Mandarin catalog really is
+better — `陈奕迅 富士山下` comes back first, where iTunes needs the similarity
+threshold to find it.
+
+**Playback does not.** Measured anonymously against the live API: `privilege.pl`
+is `0` for every top hit, and `/song/url` returns `url: null` across the board —
+including tracks with no obvious licensing issue. Without
+`CLAUDIO_NETEASE_COOKIE` set to a logged-in account, this provider can look songs
+up but cannot play a single one, which makes it strictly weaker than iTunes'
+30-second previews. With a cookie, you get whatever that account has rights to;
+VIP tracks still need VIP.
+
+Two more things the catalog does that Apple Music doesn't: covers and AI-generated
+uploads frequently outrank the originals (searching `周杰伦 晴天` returns five
+covers before anything else, because JVR's catalog is no longer licensed there),
+and its search is fuzzy enough that a fabricated title can match a real upload.
+That second one forced a real fix — see below.
+
+### The alternate path needed a second gate
+
+NetEase's looser search exposed a hole that iTunes never triggered: a fabricated
+title that *contains* a real one ("永夜的第七章序曲" wraps the real "夜的第七章")
+scores 0.81 on similarity, comfortably over the 0.72 threshold, and leaked
+through as an `alternate`.
+
+Similarity alone can't catch it. So when the artist doesn't corroborate — the
+`alternate` path, and only there — the match now also has to clear a **length
+ratio** floor of 0.8. Traditional/simplified pairs are the same length and pass;
+a title wrapped in extra words is 0.625 and doesn't. Five new `verify` cases pin
+the boundary.
 
 **Why not Spotify:** since February 2026, registering a Spotify developer app
 requires the account to hold an active Premium subscription, and Development Mode
@@ -188,14 +230,91 @@ restates the schema in the prompt, validates the reply with Zod, and retries onc
 with the validation error fed back — none of those providers guarantee strict
 `json_schema`, so the client cannot assume the response is well-formed.
 
+## The station (stage ③)
+
+Stage ① answered when you asked. Stage ③ is what makes it a station: it knows
+what the weather is doing, it has a schedule, it talks, and it can play out loud.
+
+### Environment: weather and calendar
+
+Weather comes from **Open-Meteo** — free, no key, no account, chosen for the same
+reason as iTunes. Calendar reads your local `Calendar.app` over AppleScript, the
+same route `scripts/export-apple-music.mjs` uses for Music.app; the data is
+already on this machine, so there is no reason to reach for a cloud API.
+
+Both are **off the critical path**. Each has its own timeout and degrades to a
+single honest line, because a turn must never fail over a nice-to-have. The
+prompt distinguishes "not wired up" from "wired up but couldn't fetch" — say it
+vaguely and the model will invent a forecast.
+
+Calendar is opt-in (`CLAUDIO_CALENDAR=on`): the first read triggers a system
+permission prompt, and Calendar's Apple Events are slow enough that the latency
+should be a choice, not a surprise.
+
+Both land in the **volatile** group. Weather changes every 15 minutes; in the
+stable group it would invalidate the cached prefix dozens of times a day. Four
+`verify` assertions hold that line.
+
+### Announcements: `say` and `segue` finally get used
+
+`segue` has been in the output contract since day one, rendered as text and
+otherwise idle. It exists for this.
+
+Speech uses the browser's **Web Speech API** — no cloud TTS, no key, no bill,
+consistent with everything else here. The two fields fire at different moments,
+which is the whole point:
+
+- `say` — when the reply arrives, before the music starts
+- `segue` — when the **whole queue** finishes, because it's a hook pointing at
+  next time. Reading it after every track would turn it into recited copy.
+
+Music ducks to 15% while the DJ talks, the way a real station does. The MIC
+toggle in the header is off by default and its state persists; iOS only allows
+the first `speak()` inside a user gesture, so the toggle doubles as the unlock.
+
+### Scheduler: the station has a lineup
+
+`POST /api/plan/today` walks the slots in your `routines.md` and pre-books a set
+for each one. Slots are planned **serially, not in parallel** — each one is told
+what the earlier ones already took, or a day's four slots recommend the same five
+songs.
+
+This is also where fragment ⑥ (execution trace) stops being a placeholder. A
+scheduled turn tells the model it was woken by the timetable and which slot it's
+booking, so the DJ writes "when your commute rolls around" instead of opening
+cold.
+
+Planning costs money — one model call per slot — so it only ever happens on an
+explicit `POST`. `GET` reads the stored plan and is free; the UI polls that
+freely and puts the spend behind a button. Re-posting returns the cached plan
+unless you pass `force`.
+
+### Cast: play it out loud
+
+`src/cast/upnp.ts` speaks SSDP and AVTransport directly — a UDP multicast
+M-SEARCH to find renderers, then SOAP to drive them. No dependency: the fields to
+read are a fixed handful, and this project's entire dependency list is three
+packages.
+
+The URL handed to the device must be reachable **by the device**. That mkcert
+certificate means nothing to a television — which is fine, because iTunes preview
+URLs and NetEase stream URLs are public either way. DIDL-Lite metadata rides
+along so the screen shows a title and artwork instead of a URL. Casting pauses
+local playback, so the same song doesn't play twice in one room.
+
+Verified against a real DLNA renderer on the LAN: discovery, description
+parsing, and the SOAP round-trip (`GetTransportInfo` → `NO_MEDIA_PRESENT`).
+
 ## Roadmap
 
 - [x] **Stage ①** conversational recommendation · hallucination filter · 30s previews
-- [ ] **Stage ②** full-track playback (MusicKit JS)
-- [ ] **Stage ③** the full station: scheduler · TTS announcements · weather/calendar · UPnP
+- [x] **Stage ②** full-track playback — via NetEase, not MusicKit ([why](#netease-read-the-cookie-note-before-you-switch))
+- [x] **Stage ③** scheduler · spoken announcements · weather/calendar · UPnP cast
+- [ ] `prefs` — preferences learned from behaviour, merged with the hand-written corpus
 
-Stage ③'s HTTP contract (`/api/plan/today`) and tables (`plan`, `prefs`) are
-already reserved, so no schema migration is needed later.
+The `plan` table and the `/api/plan/today` contract were reserved in stage ①, so
+the scheduler landed without a schema migration. `prefs` is still empty and is
+the one reserved piece not yet used.
 
 ## Known limits
 
@@ -205,8 +324,19 @@ already reserved, so no schema migration is needed later.
   Haiku). A thin corpus silently won't cache — `cacheReadTokens` stays at 0. Write
   more and it starts working.
 - The iTunes Search API is public but carries no SLA and no documented rate limits.
-- Local-only for now. On `http://<lan-ip>` the browser has no secure context, so
-  "Add to Home Screen" and service workers are unavailable.
+- Local-only. `npm run certs` fixes the secure-context problem on the LAN, but
+  the certificate is bound to an IP — change Wi-Fi and you re-run it. A phone
+  also has to trust the mkcert root CA separately (AirDrop `rootCA.pem`, install
+  the profile, then enable it under Certificate Trust Settings).
+- The NetEase provider needs a logged-in cookie to play anything at all, and the
+  self-hosted API it depends on is reverse-engineered — it can break without
+  notice. See the provider section above.
+- The scheduler plans; nothing yet *fires* at the start of a slot. The lineup is
+  there when you open the app, but it will not wake you up.
+- Casting was verified read-only against a real renderer (discovery, description,
+  `GetTransportInfo`). `SetAVTransportURI` + `Play` follow the same SOAP path but
+  were deliberately not fired — that makes a television in someone's living room
+  start playing music.
 
 ---
 ---
@@ -219,7 +349,7 @@ already reserved, so no schema migration is needed later.
 它不是推荐算法，而是**一个 prompt 组装器加一层薄薄的 API 胶水**。全部智能都在
 你自己写的语料里，代码只负责让它保持诚实。
 
-**当前状态：阶段① —— 对话式推荐 + 30 秒试听，音源零成本。**
+**当前状态：阶段③ —— 整曲播放、当日排期、语音播报、投到 DLNA 设备外放。**
 
 ## 快速开始
 
@@ -235,12 +365,16 @@ npm run dev:stub
 # 真实模式：需要模型 API key
 cp .env.example .env
 npm run dev
+
+# 签一张本地证书，手机才有安全上下文（装 PWA 的前提）
+brew install mkcert && mkcert -install    # 每台机器一次，会要一次密码
+npm run certs                             # 换 WiFi、IP 变了就重跑
 ```
 
-打开 http://localhost:8080。启动横幅还会打印局域网地址，手机连同一 WiFi 可直接访问。
+打开 https://localhost:8080。启动横幅还会打印局域网地址，手机连同一 WiFi 可直接访问。
 
 ```bash
-npm run verify      # 11 项管线断言 + 8 条相似度边界用例，不花钱
+npm run verify      # 18 项管线断言 + 13 条相似度边界用例，不花钱
 npm run typecheck
 ```
 
@@ -277,7 +411,7 @@ Claudio 的全部个性来自 `user/` 下的三个文件。仓库里只有 `*.ex
 四层。
 
 ```
-① 外部上下文   user/*.md · 模型 API · iTunes Search API
+① 外部上下文   user/*.md · 模型 API · 音源 API · Open-Meteo · Calendar.app
 ② 本地大脑     server.ts · context/ · brain/ · music/ · state/
 ③ 运行时聚合   每次触发把六片粘成一个 prompt
 ④ 交互表层     PWA (localhost:8080) + HTTP 契约
@@ -322,11 +456,42 @@ alternate 一律降级到队列末尾，且每次回复最多保留一首。
 | provider | 状态 | 成本 | 能力 |
 |---|---|---|---|
 | `itunes` | ✅ 已实现 | 免费、零鉴权 | 搜索校验 · 封面 · 30 秒试听 |
-| `applemusic` | 阶段② | $99/年 Developer Program + 你的 Apple Music 订阅 | 整曲播放 |
-| `netease` | 阶段②备选 | 免费，需自建 | 华语曲库最全，但接口不稳定 |
+| `netease` | ✅ 已实现 | 免费，需自建 | 华语曲库最全 · **带登录 cookie 才能整曲播放** |
+| `applemusic` | 未实现 | $99/年 Developer Program + 你的 Apple Music 订阅 | 整曲播放 |
 
 选 iTunes 起步的理由：它返回的 `trackId` **就是** Apple Music catalog ID，
-将来升级 MusicKit 时匹配逻辑可以原样继承。
+将来若升级 MusicKit，匹配逻辑可以原样继承。
+
+### 网易云：切过去之前先看 cookie 这一段
+
+```bash
+npm run netease:api     # 起一个自建的 NeteaseCloudMusicApi，监听 :3000
+CLAUDIO_MUSIC_PROVIDER=netease npm run dev
+```
+
+匿名状态下搜索和元数据都正常，华语曲库确实更全 —— 搜「陈奕迅 富士山下」
+第一条就是原版，iTunes 那边要靠相似度兜。
+
+**但播不了。** 对着真实接口实测：热门结果的 `privilege.pl` 全是 0，
+`/song/url` 一律返回 `url: null`，连没有明显版权问题的歌也一样。
+不设 `CLAUDIO_NETEASE_COOKIE`（一个已登录账号的 cookie）的话，
+这个 provider 只能查不能播，能力严格弱于 iTunes 的 30 秒试听。
+带上 cookie 能播的是这个账号有权限的部分，VIP 曲目仍然要 VIP。
+
+还有两件 Apple Music 不会发生的事：翻唱和 AI 生成的上传经常排在原版前面
+（搜「周杰伦 晴天」前五条全是翻唱，因为杰威尔的曲库已经不在网易云了），
+以及它的搜索松到能让一个编造的曲名匹配上真实条目 ——
+后面这条逼出了一个真的修复。
+
+### alternate 那条路需要第二道闸
+
+网易云更松的搜索暴露了一个 iTunes 从没触发过的洞：
+一个**包着**真实曲名的编造曲名（「永夜的第七章序曲」裹着真实的「夜的第七章」）
+相似度能拿到 0.81，稳稳越过 0.72 的阈值，被当成 alternate 放行。
+
+光靠相似度拦不住。所以当艺人对不上时 —— 也就是 alternate 那条路，且只在那里
+—— 匹配还必须再过一道 **长度比** 0.8 的闸。繁简对是等长的，能过；
+被额外的词裹起来的曲名是 0.625，过不去。新增 5 条 verify 用例把边界钉死。
 
 **为什么不是 Spotify**：2026 年 2 月起，注册 Spotify 开发者应用的账号必须持有
 Premium 订阅，且 Development Mode 限 1 个 Client ID、5 个授权用户。
@@ -360,14 +525,79 @@ GLM / DeepSeek / Kimi 共用一个实现（`src/brain/openai-compat.ts`），因
 用 Zod 校验、失败时把错误回灌重试一次 —— 这三家都不保证严格 `json_schema`，
 客户端不能假设返回一定合规。
 
+## 电台本身（阶段③）
+
+阶段①是你问它才答。阶段③才让它成为一个电台：它知道外面什么天气，
+有自己的节目表，会说话，能在屋里放出来。
+
+### 环境注入：天气与日程
+
+天气用 **Open-Meteo** —— 免费、不用 key、不用注册，选它的理由和当初选 iTunes
+一模一样。日程走 AppleScript 读本机 `Calendar.app`，
+和 `scripts/export-apple-music.mjs` 读 Music.app 是同一条路子：
+数据本来就在这台机器上，没理由去接一个云日历。
+
+两者都**不在关键路径上**。各自带超时，取不到就降级成一行老实话 ——
+一轮对话绝不该因为一个锦上添花的东西而失败。提示词里明确区分
+「没接入」和「接了但这次没取到」：含糊其辞会让模型自己编一个天气出来。
+
+日程默认关闭（`CLAUDIO_CALENDAR=on` 打开）：第一次读会弹系统授权框，
+而且 Calendar 的 Apple Event 慢到那个延迟应该由用户自己选择承担，而不是撞上。
+
+两者都进**易变组**。天气每 15 分钟变一次，混进稳定组的话缓存前缀一天要作废几十次。
+4 条 verify 断言守着这条线。
+
+### 语音播报：`say` 和 `segue` 终于派上用场
+
+`segue` 从第一天起就在输出契约里，一直只被渲染成文本，闲置至今。它就是为这一刻存在的。
+
+合成用浏览器自带的 **Web Speech API** —— 不接云 TTS、不要 key、不产生账单，
+和这个项目其他所有决定一致。两个字段在不同时机触发，这正是关键：
+
+- `say` —— 回复到达时念，在音乐开始之前
+- `segue` —— **整个队列**播完时才念，因为它是指向下一次的钩子。
+  每首歌后面都念一遍，它就变成念稿子了。
+
+DJ 说话时音乐压到 15%，和真实电台一样。顶栏的 MIC 开关默认关闭、状态会记住；
+iOS 只允许在用户手势里发起第一次 `speak()`，所以这个开关同时充当解锁动作。
+
+### 调度器：电台有节目表了
+
+`POST /api/plan/today` 遍历 `routines.md` 里的时段，为每一档预排一组歌。
+各档是**串行**排的，不是并行 —— 后一档要看得见前面已经用掉了哪些歌，
+否则一天四档很可能各自推荐同样那五首。
+
+这里也是第⑥片（执行轨迹）第一次不再是占位符。由调度器触发的那一轮会告诉模型：
+你是被时间表叫醒的、正在为哪一档排期。于是 DJ 写出来的是
+「等你那个通勤时段到了」，而不是凭空开始介绍歌。
+
+排期要花钱 —— 一档一次模型调用 —— 所以它只在显式 `POST` 时发生。
+`GET` 只读库、免费，前端可以随便轮询，把花钱那一步放在按钮后面。
+重复 POST 会直接返回已有的计划，除非带 `force`。
+
+### 外放：让它在屋里响
+
+`src/cast/upnp.ts` 直接讲 SSDP 和 AVTransport —— 先用 UDP 组播发一个 M-SEARCH
+找渲染器，再用 SOAP 驱动它。不引依赖：要读的字段就固定那几个，
+而这个项目的全部依赖只有三个包。
+
+交给设备的 URL 必须是**设备自己能访问到的**。那张 mkcert 证书对一台电视毫无意义 ——
+不过无所谓，iTunes 试听和网易云直链本来就是公网地址。
+DIDL-Lite 元数据一起带过去，这样电视屏幕上显示的是曲名和封面，不是一串 URL。
+投出去之后本机会暂停，免得同一首歌在一个屋里放两遍。
+
+已对局域网上一台真实 DLNA 渲染器验证：发现、描述解析、SOAP 往返
+（`GetTransportInfo` → `NO_MEDIA_PRESENT`）全部打通。
+
 ## 路线
 
 - [x] **阶段①** 对话推荐 · 幻觉过滤 · 30 秒试听
-- [ ] **阶段②** 整曲播放（MusicKit JS）
-- [ ] **阶段③** 完整电台：调度器 · TTS 播报 · 天气/日历注入 · UPnP 外放
+- [x] **阶段②** 整曲播放 —— 走网易云，不是 MusicKit（[原因](#网易云切过去之前先看-cookie-这一段)）
+- [x] **阶段③** 调度器 · 语音播报 · 天气/日程注入 · UPnP 外放
+- [ ] `prefs` —— 从行为里学到的偏好，与手写语料合并
 
-阶段③的 HTTP 契约（`/api/plan/today`）和数据表（`plan` / `prefs`）已经预留，
-届时不需要 schema 迁移。
+`plan` 表和 `/api/plan/today` 契约在阶段①就预留好了，所以调度器落地时
+一次 schema 迁移都不需要。`prefs` 还是空的，是唯一一处预留了但还没用上的地方。
 
 ## 已知边界
 
@@ -375,5 +605,13 @@ GLM / DeepSeek / Kimi 共用一个实现（`src/brain/openai-compat.ts`），因
 - prompt 缓存要求稳定前缀超过模型门槛（Haiku 是 2048 token）。语料太薄不会报错，
   只是静默地不缓存，`cacheReadTokens` 一直是 0。写厚了就会自动生效。
 - iTunes Search API 是公开接口，但无 SLA、无速率限制文档。
-- 目前仅本地运行。`http://<局域网IP>` 不是安全上下文，所以「添加到主屏幕」和
-  Service Worker 都不可用。
+- 仅本地运行。`npm run certs` 解决了局域网的安全上下文问题，但证书绑定 IP ——
+  换了 WiFi 就得重跑。手机还要单独信任 mkcert 的根证书
+  （AirDrop 传 `rootCA.pem` → 安装描述文件 → 证书信任设置里打开）。
+- 网易云 provider 不带登录 cookie 就一首也播不了，且它依赖的自建服务是逆向的，
+  随时可能失效。见上面 provider 那一节。
+- 调度器只负责**排**，还没有东西在时段开始时**触发**。
+  节目表在你打开应用时就在那儿，但它不会主动叫醒你。
+- 外放只做了只读验证（发现、描述解析、`GetTransportInfo`）。
+  `SetAVTransportURI` + `Play` 走的是同一条 SOAP 路径，但故意没有真的发出去 ——
+  那会让别人客厅里的电视突然开始放歌。

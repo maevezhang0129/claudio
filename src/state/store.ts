@@ -226,7 +226,55 @@ export class Store {
     });
   }
 
+  // ── 阶段③：调度器的当日计划 ─────────────────────────────
+  //
+  // 一天一档一行。重排同一档就覆盖 —— 计划是「现在打算怎么播」，
+  // 不是历史流水；历史在 plays 表里，那才是真正发生过的事。
+
+  savePlan(day: string, slot: string, payload: unknown): void {
+    this.db
+      .prepare(`DELETE FROM plan WHERE day = ? AND slot = ?`)
+      .run(day, slot);
+    this.db
+      .prepare(
+        `INSERT INTO plan (day, slot, payload, created_at) VALUES (?, ?, ?, ?)`,
+      )
+      .run(day, slot, JSON.stringify(payload), Date.now());
+  }
+
+  planForDay(day: string): Array<{ slot: string; payload: any; createdAt: number }> {
+    const rows = this.db
+      .prepare(`SELECT slot, payload, created_at FROM plan WHERE day = ? ORDER BY id`)
+      .all(day) as Array<{ slot: string; payload: string; created_at: number }>;
+    return rows.map((r) => ({
+      slot: r.slot,
+      // 手改过库、或早期版本写进去的脏数据不该让整个接口 500
+      payload: safeParse(r.payload),
+      createdAt: r.created_at,
+    }));
+  }
+
+  clearPlan(day: string): void {
+    this.db.prepare(`DELETE FROM plan WHERE day = ?`).run(day);
+  }
+
+  /** 只保留最近几天的计划 —— 过期的计划没有任何回看价值 */
+  prunePlans(keepDays = 3): void {
+    const cutoff = new Date(Date.now() - keepDays * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    this.db.prepare(`DELETE FROM plan WHERE day < ?`).run(cutoff);
+  }
+
   close(): void {
     this.db.close();
+  }
+}
+
+function safeParse(raw: string): any {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
 }

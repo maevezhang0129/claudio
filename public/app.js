@@ -22,10 +22,11 @@ const els = {
   feed: $("feed"), intro: $("intro"),
   input: $("input"), send: $("send"),
   audio: $("audio"),
+  cast: $("cast"), castPanel: $("cast-panel"),
   viewRadio: $("view-radio"), viewProfile: $("view-profile"),
   brand: $("brand"), back: $("back"), reset: $("reset"), mic: $("mic"),
   sPlayed: $("s-played"), sPeak: $("s-peak"), sRoutines: $("s-routines"),
-  pfRecent: $("pf-recent"),
+  pfRecent: $("pf-recent"), pfPlan: $("pf-plan"), planBuild: $("plan-build"),
 };
 
 const SESSION = "default";
@@ -232,6 +233,7 @@ els.toggle.onclick = () => {
 };
 els.prev.onclick = () => step(-1);
 els.next.onclick = () => step(1);
+if (els.cast) els.cast.onclick = openCast;
 
 els.audio.addEventListener("timeupdate", () => {
   els.tNow.textContent = mmss(els.audio.currentTime);
@@ -257,6 +259,63 @@ els.rail.onclick = (e) => {
   const r = els.rail.getBoundingClientRect();
   els.audio.currentTime = ((e.clientX - r.left) / r.width) * els.audio.duration;
 };
+
+// ─────────────────────────────── 外放（UPnP）
+//
+// 发现要等 3 秒 UDP 广播，所以点开面板才发现，不在启动时抢跑。
+
+async function openCast() {
+  if (!els.castPanel) return;
+  const panel = els.castPanel;
+  if (!panel.hidden) { panel.hidden = true; return; }
+
+  panel.hidden = false;
+  panel.replaceChildren(el("span", "pf-empty", "正在找设备…"));
+  try {
+    const { devices } = await api("/api/cast/devices");
+    if (!devices.length) {
+      panel.replaceChildren(el("span", "pf-empty",
+        "没找到 DLNA 设备。确认它开着、和这台机器在同一个网段。"));
+      return;
+    }
+    panel.replaceChildren();
+    for (const d of devices) {
+      const b = el("button", "chip", d.friendlyName);
+      b.type = "button";
+      b.onclick = () => castCurrent(d);
+      panel.append(b);
+    }
+  } catch (e) {
+    panel.replaceChildren(el("span", "pf-empty", e.message));
+  }
+}
+
+async function castCurrent(device) {
+  const t = state.queue[state.index] ?? state.queue[0];
+  const src = t ? srcOf(t) : null;
+  if (!t || !src) {
+    els.castPanel.replaceChildren(el("span", "pf-empty", "这首没有可投的音频源。"));
+    return;
+  }
+  els.castPanel.replaceChildren(el("span", "pf-empty", `正在投到 ${device.friendlyName}…`));
+  try {
+    await api("/api/cast/play", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        location: device.location, url: src,
+        title: t.title, artist: t.artist,
+        album: t.album, artworkUrl: t.artworkUrl,
+      }),
+    });
+    // 声音已经交给设备了，本机就该闭嘴 —— 否则同一首歌在屋里放两遍
+    els.audio.pause();
+    els.castPanel.replaceChildren(el("span", "pf-empty",
+      `已投到 ${device.friendlyName}。本机已停止播放。`));
+  } catch (e) {
+    els.castPanel.replaceChildren(el("span", "pf-empty", e.message));
+  }
+}
 
 // ─────────────────────────────── 对话流
 
@@ -400,7 +459,48 @@ function showProfile(on) {
   if (on) loadProfile();
 }
 
+/**
+ * 今日节目单。
+ *
+ * 读是免费的（纯查库），所以打开资料页就拉一次；
+ * 排期要花钱（一档一次模型调用），所以必须点按钮才发生。
+ */
+async function loadPlan() {
+  if (!els.pfPlan) return;
+  try {
+    const { plan } = await api("/api/plan/today");
+    renderPlan(plan ?? []);
+  } catch {
+    els.pfPlan.replaceChildren(el("span", "pf-empty", "节目单读不到。"));
+  }
+}
+
+function renderPlan(plan) {
+  if (!plan.length) {
+    els.pfPlan.replaceChildren(el("span", "pf-empty", "今天还没有排期。"));
+    return;
+  }
+  els.pfPlan.replaceChildren();
+  for (const p of plan) {
+    const row = el("div", "plan-row");
+    const head = el("div", "plan-head");
+    head.append(el("span", "lbl", p.slot ?? ""));
+    head.append(el("span", "rd", p.payload?.range ?? ""));
+    row.append(head);
+    const names = (p.payload?.tracks ?? []).map((t) => `${t.artist} - ${t.title}`);
+    row.append(el("div", "plan-tracks",
+      names.length ? names.join(" · ") : "这一档没排出能播的歌"));
+    // 点一下把这一档载进队列 —— 节目单不是只能看的
+    if (p.payload?.tracks?.length) {
+      row.style.cursor = "pointer";
+      row.onclick = () => { loadQueue(p.payload.tracks); showProfile(false); };
+    }
+    els.pfPlan.append(row);
+  }
+}
+
 async function loadProfile() {
+  loadPlan();
   try {
     const p = await api("/api/profile");
     els.sPlayed.textContent = p.played.toLocaleString();
@@ -459,6 +559,23 @@ els.reset.onclick = async () => {
   syncTransport();
   registerSW();
   initMic();
+
+  if (els.planBuild) {
+    els.planBuild.onclick = async () => {
+      els.planBuild.disabled = true;
+      els.planBuild.textContent = "排期中…";
+      try {
+        const { plan } = await api("/api/plan/today", { method: "POST",
+          headers: { "content-type": "application/json" }, body: "{}" });
+        renderPlan((plan ?? []).map((p) => ({ slot: p.slot, payload: p })));
+      } catch (e) {
+        els.pfPlan.replaceChildren(el("span", "pf-empty", e.message));
+      } finally {
+        els.planBuild.disabled = false;
+        els.planBuild.textContent = "排今天的期";
+      }
+    };
+  }
 })();
 
 /**

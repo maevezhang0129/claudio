@@ -18,6 +18,9 @@ import { createBrain } from "./brain/index.ts";
 import { createMusicProvider } from "./music/index.ts";
 import type { ResolveResult, Track } from "./music/types.ts";
 import { Store } from "./state/store.ts";
+import { buildPlan, today } from "./schedule/planner.ts";
+import { cast, discover, stop as castStop, transportInfo } from "./cast/upnp.ts";
+import type { Device } from "./cast/upnp.ts";
 import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
@@ -230,11 +233,149 @@ function toResolvedTrack(r: ResolveResult): ResolvedTrack {
   return { ...r.track, confidence: r.confidence, note: r.note };
 }
 
-// ---- 阶段③ 的占位路由，先把 HTTP 契约固定下来 ----
-app.get("/api/plan/today", async () => ({
-  plan: [],
-  note: "调度器属于阶段③，尚未实现",
-}));
+// ---- 调度器（阶段③）。契约在阶段①就固定下来了，这里把它填上 ----
+
+/** 读当日节目单。纯读库，不花钱 —— 前端可以随便轮询。 */
+app.get("/api/plan/today", async () => {
+  const day = today();
+  return { day, plan: store.planForDay(day) };
+});
+
+/**
+ * 排期。单独用 POST 而不是让 GET 顺手生成 ——
+ * 这是一次会花钱的操作（一档一次模型调用），必须是显式触发的，
+ * 绝不能因为有人打开了页面就跑起来。
+ */
+app.post<{ Body: { slot?: string; force?: boolean } }>(
+  "/api/plan/today",
+  async (req, reply) => {
+    if (!brainReady) {
+      return reply.code(503).send({ error: "没有配置大脑 API key，排不了期" });
+    }
+    const day = today();
+    const slot = req.body?.slot;
+
+    // 已经排过就直接返回，除非显式要求重排。防的是手抖多点几下，
+    // 每一下都是真的模型调用。
+    if (!req.body?.force) {
+      const existing = store.planForDay(day);
+      const hit = slot ? existing.filter((p) => p.slot === slot) : existing;
+      if (hit.length) return { day, plan: hit, cached: true };
+    }
+
+    try {
+      const plans = await buildPlan({
+        rootDir: config.rootDir,
+        brain,
+        music,
+        store,
+        day,
+        onlySlot: slot,
+      });
+      if (!plans.length) {
+        return reply.code(422).send({
+          error: "routines.md 里没有能解析出的时间段，无法排期。" +
+            "写成 `- 07:00–09:00 通勤：…` 这种形式。",
+        });
+      }
+      return { day, plan: plans, cached: false };
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(502).send({
+        error: `排期失败：${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  },
+);
+
+/** 清掉当日节目单，便于改完语料重排 */
+app.delete("/api/plan/today", async () => {
+  const day = today();
+  store.clearPlan(day);
+  return { ok: true, day };
+});
+
+// ---- UPnP 外放（阶段③）----
+//
+// 发现要等 3 秒广播，不能每次投歌都重来一遍，所以最近一次的结果留着。
+// 键用 location（设备描述文件地址），它比 IP 稳 —— DHCP 换址后描述文件
+// 地址也会变，正好该重新发现。
+const renderers = new Map<string, Device>();
+
+app.get("/api/cast/devices", async () => {
+  const found = await discover(3000);
+  renderers.clear();
+  for (const d of found) renderers.set(d.location, d);
+  return {
+    devices: found.map((d) => ({
+      location: d.location,
+      ip: d.ip,
+      friendlyName: d.friendlyName,
+    })),
+  };
+});
+
+/**
+ * 投一首过去。
+ *
+ * url 必须是**设备自己能访问到的公网直链** —— 本机那张 mkcert 证书
+ * 对电视毫无意义。iTunes 试听和网易云直链本来就是公网地址，直接转交。
+ */
+app.post<{
+  Body: {
+    location?: string;
+    url?: string;
+    title?: string;
+    artist?: string;
+    album?: string;
+    artworkUrl?: string;
+  };
+}>("/api/cast/play", async (req, reply) => {
+  const { location, url } = req.body ?? {};
+  if (!location || !url) {
+    return reply.code(400).send({ error: "需要 location 和 url" });
+  }
+  const device = renderers.get(location);
+  if (!device) {
+    return reply.code(404).send({ error: "这台设备不在最近一次发现结果里，先 GET /api/cast/devices" });
+  }
+  try {
+    await cast(device, url, {
+      title: req.body.title ?? "Claudio",
+      artist: req.body.artist ?? "",
+      album: req.body.album,
+      artworkUrl: req.body.artworkUrl,
+    });
+    return { ok: true, device: device.friendlyName };
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(502).send({
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post<{ Body: { location?: string } }>("/api/cast/stop", async (req, reply) => {
+  const device = req.body?.location ? renderers.get(req.body.location) : undefined;
+  if (!device) return reply.code(404).send({ error: "设备不在最近一次发现结果里" });
+  try {
+    await castStop(device);
+    return { ok: true };
+  } catch (err) {
+    return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** 只读地问设备现在在干嘛。用来确认链路通不通，不会让它出声。 */
+app.get<{ Querystring: { location?: string } }>("/api/cast/state", async (req, reply) => {
+  const device = req.query.location ? renderers.get(req.query.location) : undefined;
+  if (!device) return reply.code(404).send({ error: "设备不在最近一次发现结果里" });
+  try {
+    return { state: await transportInfo(device) };
+  } catch (err) {
+    return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
 
 /** 局域网地址 —— 手机连同一 WiFi 时用这个访问，省得每次手动查 IP */
 function lanUrl(scheme: string, port: number): string | null {

@@ -464,6 +464,26 @@ body {
 .pf-empty { font-size: 13px; color: var(--ash); }
 .src-note { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: var(--ash); opacity: .7; margin: 0; }
 
+/* 今日节目单 —— 一档一行，读起来像排在墙上的班表 */
+.plan-row {
+  border-left: 1px solid var(--line);
+  padding-left: calc(var(--pitch) * 2);
+}
+.plan-row:hover { border-left-color: var(--signal); }
+.plan-head {
+  display: flex; align-items: baseline;
+  gap: calc(var(--pitch) * 2);
+  margin-bottom: var(--pitch);
+}
+.plan-head .rd { font-size: 11px; }
+.plan-tracks { font-size: 13px; color: var(--ink); line-height: 1.5; }
+
+/* 外放面板 —— 藏在播放器里，点了投屏才出来 */
+.cast-panel {
+  display: flex; flex-wrap: wrap;
+  gap: var(--pitch);
+  padding: var(--pitch) 0 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .eq.on i { animation: none; }

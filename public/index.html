@@ -47,8 +47,10 @@
         <button class="tbtn" id="prev" aria-label="上一首">◀◀</button>
         <button class="tbtn on" id="toggle" aria-label="播放或暂停">▶</button>
         <button class="tbtn" id="next" aria-label="下一首">▶▶</button>
+        <button class="tbtn cast" id="cast" aria-label="投到设备">⇱</button>
       </span>
     </div>
+    <div class="cast-panel" id="cast-panel" hidden></div>
     <div class="scrub">
       <span class="rd rd-live" id="t-now">0:00</span>
       <span class="rail" id="rail"><i id="rail-fill"></i></span>
@@ -110,6 +112,14 @@
     <div class="stat"><b id="s-played">—</b><span class="lbl">Played</span></div>
     <div class="stat"><b id="s-peak">—</b><span class="lbl">Peak Hour</span></div>
     <div class="stat"><b id="s-routines">—</b><span class="lbl">Routines</span></div>
+  </div>
+
+  <div class="pf-sec">
+    <span class="lbl">今日节目单</span>
+    <div class="pf-list" id="pf-plan">
+      <span class="pf-empty">今天还没有排期。</span>
+    </div>
+    <button class="chip" id="plan-build">排今天的期</button>
   </div>
 
   <div class="pf-sec">

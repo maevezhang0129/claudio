@@ -8,6 +8,8 @@
  * 点一下可以把那一组重新载入队列。
  */
 
+import { tts } from "./tts.js";
+
 const $ = (id) => document.getElementById(id);
 
 const els = {
@@ -21,7 +23,7 @@ const els = {
   input: $("input"), send: $("send"),
   audio: $("audio"),
   viewRadio: $("view-radio"), viewProfile: $("view-profile"),
-  brand: $("brand"), back: $("back"), reset: $("reset"),
+  brand: $("brand"), back: $("back"), reset: $("reset"), mic: $("mic"),
   sPlayed: $("s-played"), sPeak: $("s-peak"), sRoutines: $("s-routines"),
   pfRecent: $("pf-recent"),
 };
@@ -34,6 +36,7 @@ const state = {
   spentUsd: 0,
   model: "",
   clockOffset: 0,   // 服务端时间 - 本地时间
+  segue: "",        // 本轮的过渡语，等整组播完再念
 };
 
 // ─────────────────────────────── 工具
@@ -241,8 +244,12 @@ els.audio.addEventListener("play", syncTransport);
 els.audio.addEventListener("pause", syncTransport);
 els.audio.addEventListener("ended", () => {
   // 电台会接着往下播
-  if (state.index < state.queue.length - 1) step(1);
-  else { syncTransport(); els.railFill.style.width = "0"; }
+  if (state.index < state.queue.length - 1) return step(1);
+  syncTransport();
+  els.railFill.style.width = "0";
+  // 整组播完了才念 segue —— 它是「指向下一次」的钩子，
+  // 跟在每首歌后面念就成了念稿子，那不是电台的节奏。
+  if (state.segue) tts.speak(state.segue);
 });
 
 els.rail.onclick = (e) => {
@@ -295,7 +302,11 @@ function addDJ(r, opts = {}) {
   turn.append(body);
   els.feed.append(turn);
 
-  if (opts.current) loadQueue(r.tracks);
+  if (opts.current) {
+    loadQueue(r.tracks);
+    state.segue = r.segue ?? "";
+    tts.speak(r.say);   // 先说话，再放歌
+  }
   scroll();
 
   if (r.usage) {
@@ -447,4 +458,50 @@ els.reset.onclick = async () => {
   await restore();
   syncTransport();
   registerSW();
+  initMic();
 })();
+
+/**
+ * 口播开关。
+ *
+ * 默认关：一打开页面就有人说话是很唐突的。开关状态记在 localStorage，
+ * 但**不做自动恢复播报** —— iOS 只在用户手势里允许第一次 speak()，
+ * 所以恢复的只是开关的样子，真正解锁要等用户自己点一下。
+ */
+function initMic() {
+  if (!els.mic) return;
+  if (!tts.supported) {
+    els.mic.hidden = true;
+    return;
+  }
+  tts.init();
+  tts.attach(els.audio);
+
+  const saved = localStorage.getItem("claudio.mic") === "on";
+  paintMic(saved);
+  if (saved) tts.setEnabled(true);
+
+  els.mic.onclick = () => {
+    const next = !tts.enabled;
+    tts.setEnabled(next);
+    paintMic(next);
+    localStorage.setItem("claudio.mic", next ? "on" : "off");
+  };
+}
+
+function paintMic(on) {
+  els.mic.classList.toggle("on", on);
+  els.mic.setAttribute("aria-pressed", String(on));
+}
+
+/**
+ * 注册 Service Worker。只在安全上下文下可用 ——
+ * http://<局域网IP> 会静默拿不到 navigator.serviceWorker，
+ * 所以这里不当作错误，跑 npm run certs 换成 https 就自动生效了。
+ */
+function registerSW() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/sw.js").catch(() => {
+    // 注册失败不影响任何功能，PWA 装不了而已
+  });
+}

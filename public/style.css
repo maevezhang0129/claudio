@@ -124,6 +124,28 @@ body {
 .status .lbl { white-space: nowrap; }
 .status .lbl.live { color: var(--signal); }
 
+/* 口播开关 —— 仪器上的一个亮不亮的丝印按钮，不是一枚图标 */
+.mic {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .18em;
+  color: var(--ash);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 3px calc(var(--pitch) * 1.5);
+  cursor: pointer;
+  transition: color .2s, border-color .2s, box-shadow .2s;
+}
+.mic:hover { color: var(--ink); border-color: var(--ash); }
+/* 亮起时用 signal 绿 —— 它此刻确实在播出，和 led.live 是同一个含义 */
+.mic.on {
+  color: var(--signal);
+  border-color: var(--signal);
+  box-shadow: 0 0 6px rgba(74, 222, 128, .25);
+}
+
 /* 头像 */
 .av {
   width: 28px; height: 28px;
@@ -441,6 +463,7 @@ body {
 .pf-item { font-size: 13.5px; color: var(--ink); }
 .pf-empty { font-size: 13px; color: var(--ash); }
 .src-note { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: var(--ash); opacity: .7; margin: 0; }
+
 
 @media (prefers-reduced-motion: reduce) {
   .eq.on i { animation: none; }

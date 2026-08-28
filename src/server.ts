@@ -18,8 +18,30 @@ import type { ResolveResult, Track } from "./music/types.ts";
 import { Store } from "./state/store.ts";
 import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
+import { readFileSync, existsSync } from "node:fs";
 
-const app = Fastify({ logger: { level: "warn" } });
+/**
+ * 有证书就走 https。
+ *
+ * 不是为了「安全」—— 本地服务没人攻击。是因为 Service Worker、
+ * 「添加到主屏幕」、以及阶段②整曲播放的播放 SDK 都硬性要求安全上下文，
+ * 而 http://<局域网IP> 不是。localhost 是特例（浏览器豁免），
+ * 所以只有手机访问时这件事才真正卡人。
+ *
+ * 证书缺失不报错，退回 http —— 克隆下来没跑过 npm run certs 的人
+ * 应该能直接 npm run dev 起来，只是手机上装不了 PWA。
+ */
+function tlsOptions() {
+  const cert = path.join(config.rootDir, "certs", "local-cert.pem");
+  const key = path.join(config.rootDir, "certs", "local-key.pem");
+  if (!existsSync(cert) || !existsSync(key)) return null;
+  return { key: readFileSync(key), cert: readFileSync(cert) };
+}
+
+// https: null 是 fastify 明确支持的「就是要 http」写法。写成三元表达式
+// 会让两个重载各推出一种 server 类型，下面所有路由都跟着变成联合类型。
+const tls = tlsOptions();
+const app = Fastify({ logger: { level: "warn" }, https: tls });
 
 const store = new Store(config.dbPath);
 const music = createMusicProvider({
@@ -201,22 +223,24 @@ app.get("/api/plan/today", async () => ({
 }));
 
 /** 局域网地址 —— 手机连同一 WiFi 时用这个访问，省得每次手动查 IP */
-function lanUrl(port: number): string | null {
+function lanUrl(scheme: string, port: number): string | null {
   for (const list of Object.values(networkInterfaces())) {
     for (const net of list ?? []) {
-      if (net.family === "IPv4" && !net.internal) return `http://${net.address}:${port}`;
+      if (net.family === "IPv4" && !net.internal) return `${scheme}://${net.address}:${port}`;
     }
   }
   return null;
 }
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
-const lan = lanUrl(config.port);
+const scheme = tls ? "https" : "http";
+const lan = lanUrl(scheme, config.port);
 console.log(`
   Claudio 已启动
 
-  本机     http://localhost:${config.port}${lan ? `
+  本机     ${scheme}://localhost:${config.port}${lan ? `
   手机     ${lan}   （连同一 WiFi）` : ""}
+  安全上下文  ${tls ? "✓ https（PWA 可安装）" : "✗ http —— 跑 npm run certs 才能在手机上装 PWA"}
 
   大脑     ${brain.name} · ${brain.model}${brainReady ? "" : "   ⚠️  缺少 API key"}
   音源     ${music.name}（storefront=${config.itunesStorefront}）

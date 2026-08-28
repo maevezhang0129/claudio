@@ -4,6 +4,10 @@ data/
 cache/
 *.log
 
+# 本地 TLS 证书与私钥 —— 每台机器自己签，私钥绝不提交。
+# npm run certs 重新生成。
+certs/
+
 # 个人品味语料 —— 含作息等私人信息，不提交。
 # 只提交 *.example.md 模板，clone 下来后 cp 一份即可。
 user/*.md

@@ -425,4 +425,5 @@ els.reset.onclick = async () => {
 
   await restore();
   syncTransport();
+  registerSW();
 })();

@@ -13,7 +13,8 @@
     "export:apple": "node scripts/export-apple-music.mjs",
     "ingest": "node scripts/ingest.mjs",
     "icons": "node scripts/make-icons.mjs",
-    "certs": "node scripts/make-certs.mjs"
+    "certs": "node scripts/make-certs.mjs",
+    "netease:api": "npx -y NeteaseCloudMusicApi@4.32.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",

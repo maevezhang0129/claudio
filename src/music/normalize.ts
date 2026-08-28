@@ -39,6 +39,19 @@ function levenshtein(a: string, b: string): number {
   return prev[b.length]!;
 }
 
+/**
+ * 归一化后的长度比，0..1。
+ *
+ * 包含式匹配的可信度全看它：有艺人佐证时，「晴天」对上「晴天 (Live)」
+ * 是安全的；一旦艺人也对不上，包含就是幻觉最主要的漏网路径 ——
+ * 编造的「永夜的第七章序曲」包含真实的「夜的第七章」，
+ * 相似度能拿到 0.81，足以骗过 0.72 的阈值。长度比 0.625 才是它露馅的地方。
+ */
+export function lengthRatio(a: string, b: string): number {
+  if (!a || !b) return 0;
+  return Math.min(a.length, b.length) / Math.max(a.length, b.length);
+}
+
 /** 0..1 相似度。空串对空串算 0，避免归一化后全空的项拿满分。 */
 export function similarity(a: string, b: string): number {
   if (!a || !b) return 0;

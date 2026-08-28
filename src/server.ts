@@ -47,6 +47,8 @@ const store = new Store(config.dbPath);
 const music = createMusicProvider({
   name: config.musicProvider,
   itunesStorefront: config.itunesStorefront,
+  neteaseBaseUrl: config.neteaseBaseUrl,
+  neteaseCookie: config.neteaseCookie,
 });
 const brain = createBrain({
   kind: config.brainKind,

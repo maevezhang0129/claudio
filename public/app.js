@@ -45,6 +45,26 @@ function el(tag, cls, text) {
   return n;
 }
 
+/**
+ * 这首歌到底放什么。
+ *
+ * iTunes 给的是 30 秒试听（previewUrl），网易云给的是整曲直链
+ * （fullPlayback.ref）。整曲优先 —— 两者同时存在时没理由只放 30 秒。
+ * 都没有说明这首歌能查到但没权限听，返回 null，由调用方跳外部链接。
+ */
+function srcOf(t) {
+  if (t.fullPlayback?.kind === "url") return t.fullPlayback.ref;
+  return t.previewUrl ?? null;
+}
+
+/** 队列上显示的时长。整曲用真实时长，试听恒为 30 秒，播不了显示跳转箭头。 */
+function durLabel(t) {
+  if (t.fullPlayback?.kind === "url") {
+    return t.durationMs ? mmss(t.durationMs / 1000) : "—:—";
+  }
+  return t.previewUrl ? "0:30" : "↗";
+}
+
 function mmss(sec) {
   if (!Number.isFinite(sec) || sec < 0) sec = 0;
   return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -113,7 +133,7 @@ function cue(t) {
   els.player.classList.add("idle");
   setNowPlaying(t);
   els.tNow.textContent = "0:00";
-  els.tTotal.textContent = "0:30";
+  els.tTotal.textContent = durLabel(t) === "↗" ? "—:—" : durLabel(t);
   els.railFill.style.width = "0";
   syncTransport();
 }
@@ -150,7 +170,7 @@ function renderQueue() {
       t.note ? `${t.artist} · ${t.note}` : `${t.artist}${t.album ? " · " + t.album : ""}`));
     row.append(body);
 
-    row.append(el("span", "dur", t.previewUrl ? "0:30" : "↗"));
+    row.append(el("span", "dur", durLabel(t)));
     row.onclick = () => play(i);
     els.queue.append(row);
   });
@@ -166,8 +186,9 @@ function play(i) {
   const t = state.queue[i];
   if (!t) return;
 
-  // 没有试听链接的（理论上 iTunes 都有）直接跳转外部
-  if (!t.previewUrl) {
+  // 放不了的跳外部 App。iTunes 理论上都有试听；网易云则是版权受限的常态。
+  const src = srcOf(t);
+  if (!src) {
     if (t.externalUrl) window.open(t.externalUrl, "_blank", "noopener");
     return;
   }
@@ -181,7 +202,7 @@ function play(i) {
   els.player.hidden = false;
   els.player.classList.remove("idle");
   setNowPlaying(t);
-  els.audio.src = t.previewUrl;
+  els.audio.src = src;
   els.audio.play().catch(() => {});
   renderQueue();
   syncTransport();

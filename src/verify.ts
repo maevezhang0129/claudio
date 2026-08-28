@@ -14,7 +14,7 @@ import { createMusicProvider } from "./music/index.ts";
 import { Store } from "./state/store.ts";
 import type { BrainAdapter, BrainRequest, BrainResult } from "./brain/types.ts";
 import { config } from "./config.ts";
-import { normalize, similarity } from "./music/normalize.ts";
+import { lengthRatio, normalize, similarity } from "./music/normalize.ts";
 import type { Track } from "./music/types.ts";
 
 const TMP_DB = path.join(config.rootDir, "data", "_test.db");
@@ -135,6 +135,30 @@ for (const [a, b, want] of simCases) {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${score.toFixed(3)} ${got ? "通过" : "拒绝"}  ${a} <-> ${b}`);
 }
 
+// ---- alternate 路径的长度比闸门 ----
+// 相似度阈值单独守不住包含式匹配：编造的曲名只要「套」着一个真实曲名，
+// 就能拿到 0.8 以上。艺人对不上时必须再过一道长度比。
+// 这几条是接网易云时暴露出来的 —— 它的搜索比 iTunes 松得多，
+// 「永夜的第七章序曲」真的能召回「夜的第七章」。
+console.log("\n── alternate 长度比闸门 ──");
+const ALT_FLOOR = 0.8;
+const altCases: Array<[string, string, boolean]> = [
+  ["起风了", "起风了", true],                          // 跨平台艺名不一致的真实场景
+  ["告白气球", "告白氣球", true],                       // 繁简，长度相等
+  ["晴天", "晴天 (Live)", true],                        // 修饰词会被 normalize 剥掉
+  ["永夜的第七章序曲", "夜的第七章", false],             // 套着真实曲名的幻觉
+  ["夜的第七章前奏曲", "夜的第七章", false],
+];
+let altFailed = 0;
+for (const [a, b, want] of altCases) {
+  const na = normalize(a), nb = normalize(b);
+  const ratio = lengthRatio(na, nb);
+  const got = similarity(na, nb) >= SIM_THRESHOLD && ratio >= ALT_FLOOR;
+  const ok = got === want;
+  if (!ok) altFailed++;
+  console.log(`  ${ok ? "PASS" : "FAIL"}  比值 ${ratio.toFixed(3)} ${got ? "通过" : "拒绝"}  ${a} <-> ${b}`);
+}
+
 // ---- 断言 ----
 console.log("\n── 断言 ──");
 const checks: [string, boolean][] = [
@@ -179,5 +203,6 @@ rmSync(TMP_DB, { force: true });
 rmSync(TMP_DB + "-wal", { force: true });
 rmSync(TMP_DB + "-shm", { force: true });
 
+failed += altFailed;
 console.log(failed === 0 ? "\n全部通过" : `\n${failed} 项失败`);
 process.exit(failed === 0 ? 0 : 1);

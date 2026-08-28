@@ -15,13 +15,23 @@ import type {
   Track,
   TrackQuery,
 } from "./types.ts";
-import { normalize, similarity } from "./normalize.ts";
+import { lengthRatio, normalize, similarity } from "./normalize.ts";
 
 const ENDPOINT = "https://itunes.apple.com/search";
 
 /** 判定为「同一首歌」的阈值。0.72 是为了让繁简差异（约 0.75）能通过。 */
 const TITLE_THRESHOLD = 0.72;
 const ARTIST_THRESHOLD = 0.55;
+
+/**
+ * 第二趟（没有艺人佐证）额外要求的长度比下限。
+ *
+ * 只在 alternate 那条路上生效：艺人对上时，「晴天」→「晴天 (Live)」
+ * 这种包含式匹配是可信的；艺人对不上时它就是幻觉的主要入口。
+ * 0.8 是让繁简差异（长度相等，比值 1.0）安全通过、
+ * 而「永夜的第七章序曲」→「夜的第七章」（0.625）被拦下的分界。
+ */
+const ALT_LENGTH_FLOOR = 0.8;
 
 interface ITunesResult {
   trackId?: number;
@@ -118,8 +128,10 @@ export class ITunesProvider implements MusicProvider {
       for (const r of raw) {
         const t = this.toTrack(r);
         if (!t) continue;
-        const titleScore = similarity(wantTitle, normalize(t.title));
+        const gotTitle = normalize(t.title);
+        const titleScore = similarity(wantTitle, gotTitle);
         if (titleScore < TITLE_THRESHOLD) continue;
+        if (!requireArtist && lengthRatio(wantTitle, gotTitle) < ALT_LENGTH_FLOOR) continue;
         const artistScore = similarity(wantArtist, normalize(t.artist));
         if (requireArtist && artistScore < ARTIST_THRESHOLD) continue;
         // 曲名权重更高：艺人名有译名/别名/合唱者等噪声

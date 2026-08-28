@@ -40,5 +40,13 @@ export const config = {
     | "itunes" | "applemusic" | "netease",
   itunesStorefront: process.env.CLAUDIO_ITUNES_STOREFRONT ?? "CN",
 
+  /** 自建 NeteaseCloudMusicApi 的地址。npm run netease:api 起在 3000 */
+  neteaseBaseUrl: process.env.CLAUDIO_NETEASE_BASE_URL ?? "http://localhost:3000",
+  /**
+   * 已登录网易云账号的 cookie。没有它这个 provider 只能查不能播 ——
+   * 匿名状态下 /song/url 对几乎所有歌都返回 null。
+   */
+  neteaseCookie: process.env.CLAUDIO_NETEASE_COOKIE,
+
   dbPath: path.join(ROOT_DIR, "data", "state.db"),
 } as const;

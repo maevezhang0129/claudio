@@ -2,10 +2,13 @@
 
 import type { MusicProvider, ProviderName } from "./types.ts";
 import { ITunesProvider } from "./itunes.ts";
+import { NeteaseProvider } from "./netease.ts";
 
 export interface ProviderConfig {
   name: ProviderName;
   itunesStorefront?: string;
+  neteaseBaseUrl?: string;
+  neteaseCookie?: string;
 }
 
 export function createMusicProvider(cfg: ProviderConfig): MusicProvider {
@@ -21,11 +24,12 @@ export function createMusicProvider(cfg: ProviderConfig): MusicProvider {
       );
 
     case "netease":
-      // 阶段②备选：自建 NeteaseCloudMusicApi。华语曲库最全，
-      // 但接口是逆向的、随时可能失效，song_url 大量歌曲受版权限制。
-      throw new Error(
-        "netease provider 尚未实现（阶段②备选）。需要先自建 NeteaseCloudMusicApi 服务。",
-      );
+      // 自建 NeteaseCloudMusicApi。华语曲库最全，但接口是逆向的、随时可能失效，
+      // 且不带已登录 cookie 时几乎全部歌曲都拿不到播放直链。
+      return new NeteaseProvider({
+        baseUrl: cfg.neteaseBaseUrl,
+        cookie: cfg.neteaseCookie,
+      });
   }
 }
 

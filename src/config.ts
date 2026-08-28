@@ -37,7 +37,7 @@ export const config = {
 
   /** 音源 provider */
   musicProvider: (process.env.CLAUDIO_MUSIC_PROVIDER ?? "itunes") as
-    | "itunes" | "applemusic" | "netease",
+    | "itunes" | "applemusic" | "netease" | "mixed",
   itunesStorefront: process.env.CLAUDIO_ITUNES_STOREFRONT ?? "CN",
 
   /** 自建 NeteaseCloudMusicApi 的地址。npm run netease:api 起在 3000 */

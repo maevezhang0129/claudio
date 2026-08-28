@@ -6,7 +6,7 @@
  * 上层的 router / context / server 永远不知道底下接的是谁。
  */
 
-export type ProviderName = "itunes" | "applemusic" | "netease";
+export type ProviderName = "itunes" | "applemusic" | "netease" | "mixed";
 
 /** 整曲播放句柄。阶段①（itunes）拿不到，为 undefined。 */
 export interface FullPlayback {

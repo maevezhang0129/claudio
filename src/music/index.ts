@@ -3,6 +3,7 @@
 import type { MusicProvider, ProviderName } from "./types.ts";
 import { ITunesProvider } from "./itunes.ts";
 import { NeteaseProvider } from "./netease.ts";
+import { MixedProvider } from "./mixed.ts";
 
 export interface ProviderConfig {
   name: ProviderName;
@@ -22,6 +23,14 @@ export function createMusicProvider(cfg: ProviderConfig): MusicProvider {
       throw new Error(
         "applemusic provider 尚未实现（阶段②）。需要 Apple Developer Program 会员资格签发 developer token。",
       );
+
+    case "mixed":
+      // 网易云认歌 + iTunes 出声。两边的强项正好互补，见 mixed.ts 顶部的实测数据。
+      return new MixedProvider({
+        itunesStorefront: cfg.itunesStorefront,
+        neteaseBaseUrl: cfg.neteaseBaseUrl,
+        neteaseCookie: cfg.neteaseCookie,
+      });
 
     case "netease":
       // 自建 NeteaseCloudMusicApi。华语曲库最全，但接口是逆向的、随时可能失效，

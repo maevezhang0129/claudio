@@ -48,5 +48,14 @@ export const config = {
    */
   neteaseCookie: process.env.CLAUDIO_NETEASE_COOKIE,
 
+  /** ③ 环境注入的坐标。默认上海 —— 与提示词里的 Asia/Shanghai 时区一致 */
+  latitude: Number(process.env.CLAUDIO_LAT ?? 31.23),
+  longitude: Number(process.env.CLAUDIO_LON ?? 121.47),
+  /**
+   * 是否读本机日历。默认关 —— 第一次读会弹系统授权框，
+   * 而且 Calendar.app 的 Apple Event 慢，那个延迟每轮都要付。
+   */
+  calendarEnabled: process.env.CLAUDIO_CALENDAR === "on",
+
   dbPath: path.join(ROOT_DIR, "data", "state.db"),
 } as const;

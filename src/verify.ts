@@ -105,6 +105,9 @@ console.log("\n── 第 2 轮 ──");
 const ctx2 = await assemble({
   rootDir: config.rootDir,
   recentPlays: store.recentPlaysAsContext(15),
+  // 用固定值而不是真去拉 —— verify 的承诺是不花钱、不依赖网络
+  weather: "雷阵雨，24°C",
+  calendar: "20:00 排练",
 });
 const history = store.recentMessages("t", 20);
 console.log(`历史    ${history.length} 条：${history.map((h) => h.role).join(" → ")}`);
@@ -170,6 +173,15 @@ const checks: [string, boolean][] = [
   ["稳定组含用户语料", ctx1.stable.includes("taste.md")],
   ["稳定组不含时间戳（缓存前缀稳定）", !ctx1.stable.includes("当前时间")],
   ["易变组含时间戳", ctx2.volatile.includes("当前时间")],
+  // 天气每 15 分钟就变一次。混进稳定组的话，缓存前缀一天作废近百次，
+  // 代价远超「今天下雨」这四个字的价值。
+  ["天气进易变组", ctx2.volatile.includes("雷阵雨")],
+  ["天气不进稳定组（缓存前缀稳定）", !ctx2.stable.includes("雷阵雨")],
+  ["日程进易变组", ctx2.volatile.includes("排练")],
+  ["日程不进稳定组（缓存前缀稳定）", !ctx2.stable.includes("排练")],
+  // 「没接入」和「接了但这次没取到」必须能区分 ——
+  // 含糊其辞会让模型自己编一个天气出来。
+  ["未接入时如实说明", ctx1.volatile.includes("天气：暂未接入")],
   ["alternate 不超过上限", keptAlt.length <= MAX_ALTERNATES],
   ["exact 全部排在 alternate 之前",
     ordered.findIndex((t) => altOnly.includes(t)) === -1 ||

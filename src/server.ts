@@ -12,6 +12,8 @@ import path from "node:path";
 import { config } from "./config.ts";
 import { assemble } from "./context/assemble.ts";
 import { currentSlot, parseRoutines } from "./context/routines.ts";
+import { currentWeather } from "./context/weather.ts";
+import { todayCalendar } from "./context/calendar.ts";
 import { createBrain } from "./brain/index.ts";
 import { createMusicProvider } from "./music/index.ts";
 import type { ResolveResult, Track } from "./music/types.ts";
@@ -111,10 +113,20 @@ app.post<{ Body: { message?: string; session?: string } }>(
       });
     }
 
+    // ③ 环境里的天气和日程在这里取，不在 assemble 里 ——
+    // assemble 要被 npm run verify 反复调用，必须保持不依赖网络。
+    // 两个都自带超时和降级，取不到不影响这一轮。
+    const [weather, calendar] = await Promise.all([
+      currentWeather({ latitude: config.latitude, longitude: config.longitude }),
+      todayCalendar({ enabled: config.calendarEnabled }),
+    ]);
+
     // 六片上下文：③环境 ④记忆 由这里注入，①②从文件读，⑤是 message，⑥阶段①为空
     const context = await assemble({
       rootDir: config.rootDir,
       recentPlays: store.recentPlaysAsContext(15),
+      weather,
+      calendar,
     });
 
     const history = store.recentMessages(session, 20).map((m) => ({

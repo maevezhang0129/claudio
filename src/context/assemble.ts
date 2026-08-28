@@ -35,6 +35,16 @@ export interface AssembleOptions {
   trace?: string[];
   /** 覆盖当前时间，便于测试 */
   now?: Date;
+  /**
+   * ③ 环境注入里的天气，由调用方取好再传进来。
+   *
+   * 为什么不在这里直接拉：assemble 会被 npm run verify 反复调用，
+   * 而 verify 的承诺是「不花钱、不依赖网络」。把取数留在 server 层，
+   * 这里就永远是确定性的。
+   */
+  weather?: string | null;
+  /** ③ 环境注入里的日程，同上，由调用方取好传进来 */
+  calendar?: string | null;
 }
 
 /** ① 系统提示词 */
@@ -90,8 +100,8 @@ function stripComments(md: string): string {
     .trim();
 }
 
-/** ③ 环境注入。阶段①只有时间；阶段③再接天气和日历 */
-function environment(now: Date): string {
+/** ③ 环境注入：时间 + 天气 + 日程。都属于易变组。 */
+function environment(now: Date, weather?: string | null, calendar?: string | null): string {
   const fmt = new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
     dateStyle: "full",
@@ -110,8 +120,10 @@ function environment(now: Date): string {
 
   return [
     `当前时间：${fmt.format(now)}（${slot}）`,
-    `天气：暂未接入`,
-    `日历：暂未接入`,
+    // 明确区分「没开」和「开了但这次没取到」—— 模型据此决定要不要提天气。
+    // 含糊其辞会让它凭空编一个天气出来。
+    `天气：${weather ?? (weather === null ? "取不到" : "暂未接入")}`,
+    `日程：${calendar ?? (calendar === null ? "取不到" : "暂未接入")}`,
   ].join("\n");
 }
 
@@ -151,7 +163,7 @@ export async function assemble(opts: AssembleOptions): Promise<ContextBundle> {
   const volatile = [
     "## 此刻的环境",
     "",
-    environment(now),
+    environment(now, opts.weather, opts.calendar),
     "",
     "## 最近播过什么",
     "",

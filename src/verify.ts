@@ -105,9 +105,10 @@ console.log("\n── 第 2 轮 ──");
 const ctx2 = await assemble({
   rootDir: config.rootDir,
   recentPlays: store.recentPlaysAsContext(15),
-  // 用固定值而不是真去拉 —— verify 的承诺是不花钱、不依赖网络
+  // 用固定值而不是真去拉 —— 断言要可复现，不该跟着天气变
   weather: "雷阵雨，24°C",
   calendar: "20:00 排练",
+  prefs: ["artist.deep：keshi（每首 32 次）"],
 });
 const history = store.recentMessages("t", 20);
 console.log(`历史    ${history.length} 条：${history.map((h) => h.role).join(" → ")}`);
@@ -210,6 +211,10 @@ const checks: [string, boolean][] = [
   // 「没接入」和「接了但这次没取到」必须能区分 ——
   // 含糊其辞会让模型自己编一个天气出来。
   ["未接入时如实说明", ctx1.volatile.includes("天气：暂未接入")],
+  // prefs 会随 npm run prefs 重新推导、也会被手改。
+  // 跟语料一起放稳定组的话，改一次偏好整个缓存前缀就作废。
+  ["prefs 进易变组", ctx2.volatile.includes("artist.deep")],
+  ["prefs 不进稳定组（缓存前缀稳定）", !ctx2.stable.includes("artist.deep")],
   ["alternate 不超过上限", keptAlt.length <= MAX_ALTERNATES],
   ["exact 全部排在 alternate 之前",
     ordered.findIndex((t) => altOnly.includes(t)) === -1 ||

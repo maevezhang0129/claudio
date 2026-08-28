@@ -45,6 +45,14 @@ export interface AssembleOptions {
   weather?: string | null;
   /** ③ 环境注入里的日程，同上，由调用方取好传进来 */
   calendar?: string | null;
+  /**
+   * ④ 的另一半：从行为里推导出来的偏好（prefs 表）。
+   *
+   * 放易变组而不是跟语料一起放稳定组 —— 它会随着 npm run prefs
+   * 重新推导、也会被用户手改。混进稳定组的话，改一次偏好
+   * 整个缓存前缀就作废，而它本身只有几百 token，不值这个代价。
+   */
+  prefs?: string[];
 }
 
 /** ① 系统提示词 */
@@ -133,6 +141,17 @@ function memory(recentPlays: string[]): string {
   return recentPlays.map((p) => `- ${p}`).join("\n");
 }
 
+/**
+ * ④ 的另一半：数字推导出来的偏好。
+ *
+ * 与语料的分工是硬的 —— 语料写「只有我知道的事」，
+ * 这里写「只有数字知道的事」。两边都不该去写对方那一半。
+ */
+function learned(prefs: string[]): string {
+  if (!prefs.length) return "（还没有推导出的偏好，跑 npm run prefs 生成）";
+  return prefs.map((p) => `- ${p}`).join("\n");
+}
+
 /** ⑥ 执行轨迹 */
 function trace(entries: string[]): string {
   if (!entries.length) return "（本轮由用户主动发起，无调度轨迹）";
@@ -168,6 +187,10 @@ export async function assemble(opts: AssembleOptions): Promise<ContextBundle> {
     "## 最近播过什么",
     "",
     memory(opts.recentPlays ?? []),
+    "",
+    "## 从行为里学到的",
+    "",
+    learned(opts.prefs ?? []),
     "",
     "## 本轮是怎么被触发的",
     "",

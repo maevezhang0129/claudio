@@ -266,6 +266,51 @@ export class Store {
     this.db.prepare(`DELETE FROM plan WHERE day < ?`).run(cutoff);
   }
 
+  // ── 阶段③：从行为里学到的偏好 ─────────────────────────
+  //
+  // 与 user/*.md 的分工是清楚的：
+  //   语料  = 只有你知道的事（为什么喜欢、什么时候不听）
+  //   prefs = 只有数字知道的事（哪些艺人你会复听、哪些收了没听）
+  // 两边都不该去写对方那一半。
+
+  setPref(key: string, value: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO prefs (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      )
+      .run(key, value, Date.now());
+  }
+
+  getPref(key: string): string | null {
+    const row = this.db.prepare(`SELECT value FROM prefs WHERE key = ?`).get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  }
+
+  allPrefs(): Array<{ key: string; value: string; updatedAt: number }> {
+    const rows = this.db
+      .prepare(`SELECT key, value, updated_at FROM prefs ORDER BY key`)
+      .all() as Array<{ key: string; value: string; updated_at: number }>;
+    return rows.map((r) => ({ key: r.key, value: r.value, updatedAt: r.updated_at }));
+  }
+
+  deletePref(key: string): void {
+    this.db.prepare(`DELETE FROM prefs WHERE key = ?`).run(key);
+  }
+
+  /**
+   * 渲染成喂给模型的那一片。
+   *
+   * key 用 `分类.名字` 的形式，这里按分类前缀分组 ——
+   * 一行一条平铺出来模型读不出结构，分了组它才知道
+   * 「deep 和 shallow 是同一个维度的两端」。
+   */
+  prefsAsContext(): string[] {
+    return this.allPrefs().map((p) => `${p.key}：${p.value}`);
+  }
+
   close(): void {
     this.db.close();
   }

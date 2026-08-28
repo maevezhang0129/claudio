@@ -129,6 +129,7 @@ app.post<{ Body: { message?: string; session?: string } }>(
     const context = await assemble({
       rootDir: config.rootDir,
       recentPlays: store.recentPlaysAsContext(15),
+      prefs: store.prefsAsContext(),
       weather,
       calendar,
     });
@@ -382,6 +383,30 @@ app.get<{ Querystring: { location?: string } }>("/api/cast/state", async (req, r
   } catch (err) {
     return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+// ---- prefs：从行为里推导出来的偏好（阶段③）----
+//
+// 全是本地读写，不花钱。npm run prefs 生成第一版，之后可以逐条改 ——
+// 它是给人看也给人改的，不是黑盒。
+
+app.get("/api/prefs", async () => ({ prefs: store.allPrefs() }));
+
+app.put<{ Params: { key: string }; Body: { value?: string } }>(
+  "/api/prefs/:key",
+  async (req, reply) => {
+    const value = req.body?.value;
+    if (typeof value !== "string" || !value.trim()) {
+      return reply.code(400).send({ error: "value 必须是非空字符串" });
+    }
+    store.setPref(req.params.key, value.trim());
+    return { ok: true, key: req.params.key };
+  },
+);
+
+app.delete<{ Params: { key: string } }>("/api/prefs/:key", async (req) => {
+  store.deletePref(req.params.key);
+  return { ok: true };
 });
 
 /** 局域网地址 —— 手机连同一 WiFi 时用这个访问，省得每次手动查 IP */

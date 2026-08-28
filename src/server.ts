@@ -189,7 +189,8 @@ app.post<{ Body: { message?: string; session?: string } }>(
     // 落库。assistant 那条带上整轮 payload，刷新后曲目卡片才能原样恢复。
     store.appendMessage(session, "user", message);
     store.appendMessage(session, "assistant", dj.say, turn);
-    for (const t of tracks) store.recordPlay(session, t);
+    // 只记「进了队列」。有没有真的被听，等前端上报 —— 见 POST /api/played。
+    for (const t of tracks) store.recordQueued(session, t);
 
     return turn;
   },
@@ -383,6 +384,34 @@ app.get<{ Querystring: { location?: string } }>("/api/cast/state", async (req, r
   } catch (err) {
     return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+/**
+ * 前端上报一首歌实际听了多久。
+ *
+ * 这是整个「从行为里学」的唯一入口。在此之前 plays 表在曲目**被推荐**时
+ * 就写行，于是它记的是推荐历史而不是收听历史 —— 第④片会告诉模型
+ * 「你听过这些」，而其中大部分你从没点开过。
+ */
+app.post<{
+  Body: {
+    session?: string;
+    providerId?: string;
+    listenedMs?: number;
+    durationMs?: number;
+  };
+}>("/api/played", async (req, reply) => {
+  const { providerId, listenedMs } = req.body ?? {};
+  if (!providerId || typeof listenedMs !== "number" || listenedMs < 0) {
+    return reply.code(400).send({ error: "需要 providerId 和非负的 listenedMs" });
+  }
+  const outcome = store.recordListen(
+    req.body?.session ?? "default",
+    providerId,
+    listenedMs,
+    req.body?.durationMs,
+  );
+  return { ok: true, outcome };
 });
 
 // ---- prefs：从行为里推导出来的偏好（阶段③）----

@@ -98,7 +98,11 @@ console.log(`        ${ordered.map((t) => t.title).join(" → ")}`);
 
 store.appendMessage("t", "user", "随便");
 store.appendMessage("t", "assistant", r1.response.say);
-for (const t of tracks1) store.recordPlay("t", t);
+// 进队列 ≠ 被听。第一首上报听完，第二首上报只听了 4 秒 ——
+// 第 2 轮的记忆片应当把这两件事说成不同的事，第三首则完全不该出现。
+for (const t of tracks1) store.recordQueued("t", t);
+if (tracks1[0]) store.recordListen("t", tracks1[0].providerId, 30_000, tracks1[0].durationMs);
+if (tracks1[1]) store.recordListen("t", tracks1[1].providerId, 4_000, tracks1[1].durationMs);
 
 // ---- 第 2 轮：验证记忆和历史真的回灌了 ----
 console.log("\n── 第 2 轮 ──");
@@ -198,6 +202,12 @@ const checks: [string, boolean][] = [
   ["三首真实的歌被保留", tracks1.length === 3],
   ["首轮记忆片为空", ctx1.volatile.includes("第一次对话")],
   ["第二轮记忆片含播放记录", ctx2.volatile.includes("富士山下")],
+  // plays 表原本在曲目「被推荐」时就写行，于是第④片会告诉模型
+  // 「你听过这些」，而其中大部分从没被点开过。这三条钉住修好之后的行为。
+  ["听完的标成听完了", ctx2.volatile.includes("听完了")],
+  ["跳过的如实说成跳过", ctx2.volatile.includes("秒就切走了")],
+  ["只进过队列、没被听的不算播放记录",
+    store.recentPlays(50).length === Math.min(2, tracks1.length)],
   ["历史回灌为 user→assistant", history.length === 2 && history[0]!.role === "user"],
   ["稳定组含用户语料", ctx1.stable.includes("taste.md")],
   ["稳定组不含时间戳（缓存前缀稳定）", !ctx1.stable.includes("当前时间")],

@@ -23,6 +23,10 @@ export interface PlayRecord {
   providerId: string;
   provider: string;
   playedAt: number;
+  /** 听完了还是几秒就切走了 */
+  outcome: "played" | "skipped";
+  /** 实际听了多久 */
+  listenedMs: number;
 }
 
 export class Store {
@@ -37,6 +41,10 @@ export class Store {
 
   private migrate(): void {
     this.addColumnIfMissing("messages", "payload", "TEXT");
+    // plays 原本只在「被推荐」时写一行，于是这张表记的是推荐历史而不是收听历史。
+    // 这两列把它们分开：outcome 说这首到底有没有被听，listened_ms 说听了多久。
+    this.addColumnIfMissing("plays", "outcome", "TEXT NOT NULL DEFAULT 'queued'");
+    this.addColumnIfMissing("plays", "listened_ms", "INTEGER NOT NULL DEFAULT 0");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS messages (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,7 +66,12 @@ export class Store {
         provider_id TEXT    NOT NULL,
         title       TEXT    NOT NULL,
         artist      TEXT    NOT NULL,
-        played_at   INTEGER NOT NULL
+        played_at   INTEGER NOT NULL,
+        -- queued  推荐进队列了，但还不知道有没有被听
+        -- played  真的听完了（或听够了）
+        -- skipped 播了几秒就切走
+        outcome     TEXT    NOT NULL DEFAULT 'queued',
+        listened_ms INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_plays_time ON plays(played_at DESC);
 
@@ -164,38 +177,90 @@ export class Store {
     this.db.prepare("DELETE FROM plays WHERE session = ?").run(session);
   }
 
-  /** 资料页的三个数字 */
+  /**
+   * 资料页的三个数字。
+   *
+   * 只数 outcome='played' —— 「推荐了 40 首」和「听了 3 首」是完全不同的两件事，
+   * 把前者显示成 Played 是在骗自己。高峰时段同理：
+   * 按推荐时刻聚合出来的「高峰」只反映你什么时候在跟它说话。
+   */
   stats(): { played: number; peakHour: number | null } {
     const played = (
-      this.db.prepare("SELECT COUNT(*) AS n FROM plays").get() as { n: number }
+      this.db
+        .prepare("SELECT COUNT(*) AS n FROM plays WHERE outcome = 'played'")
+        .get() as { n: number }
     ).n;
 
-    // 按本地小时聚合播放时刻，取最高的那一格
     const row = this.db
       .prepare(
         `SELECT CAST(strftime('%H', played_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS h,
                 COUNT(*) AS n
-         FROM plays GROUP BY h ORDER BY n DESC, h ASC LIMIT 1`,
+         FROM plays WHERE outcome = 'played' GROUP BY h ORDER BY n DESC, h ASC LIMIT 1`,
       )
       .get() as { h: number; n: number } | undefined;
 
     return { played, peakHour: row ? row.h : null };
   }
 
-  recordPlay(session: string, track: Track): void {
+  /**
+   * 一首歌进了队列。这不等于它被听了 ——
+   * 落这一行是为了记住「推荐过什么」，outcome 要等前端上报才会变。
+   */
+  recordQueued(session: string, track: Track): void {
     this.db
       .prepare(
-        `INSERT INTO plays (session, provider, provider_id, title, artist, played_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO plays (session, provider, provider_id, title, artist, played_at, outcome)
+         VALUES (?, ?, ?, ?, ?, ?, 'queued')`,
       )
       .run(session, track.provider, track.providerId, track.title, track.artist, Date.now());
   }
 
+  /**
+   * 前端上报「这首实际听了多久」。
+   *
+   * 判定听完的门槛取两者之一：听满六成，或者听够 30 秒。
+   * 后一条是为 30 秒试听准备的 —— 试听放到底就是听完了，
+   * 但按整曲时长算永远只有 10%，会被误判成跳过。
+   */
+  recordListen(
+    session: string,
+    providerId: string,
+    listenedMs: number,
+    durationMs?: number,
+  ): "played" | "skipped" {
+    const enough =
+      listenedMs >= 30_000 ||
+      (durationMs ? listenedMs >= durationMs * 0.6 : false);
+    const outcome = enough ? "played" : "skipped";
+
+    // 只更新这个会话里这首歌最近的那一行 —— 同一首可能被推荐过多次，
+    // 上报的永远是刚刚听的那一次
+    this.db
+      .prepare(
+        `UPDATE plays SET outcome = ?, listened_ms = ?
+         WHERE id = (
+           SELECT id FROM plays
+           WHERE session = ? AND provider_id = ?
+           ORDER BY played_at DESC LIMIT 1
+         )`,
+      )
+      .run(outcome, Math.round(listenedMs), session, providerId);
+    return outcome;
+  }
+
+  /**
+   * 真正发生过的收听。
+   *
+   * 刻意排除 outcome='queued' —— 那些只是被推荐进过队列，
+   * 谁也不知道有没有被听。把它们当播放记录喂回模型，
+   * 等于让它以为你听过一堆其实没听过的歌，然后据此推下一批。
+   */
   recentPlays(limit = 15): PlayRecord[] {
     const rows = this.db
       .prepare(
-        `SELECT title, artist, provider, provider_id, played_at
-         FROM plays ORDER BY played_at DESC LIMIT ?`,
+        `SELECT title, artist, provider, provider_id, played_at, outcome, listened_ms
+         FROM plays WHERE outcome != 'queued'
+         ORDER BY played_at DESC LIMIT ?`,
       )
       .all(limit) as Array<{
       title: string;
@@ -203,6 +268,8 @@ export class Store {
       provider: string;
       provider_id: string;
       played_at: number;
+      outcome: string;
+      listened_ms: number;
     }>;
     return rows.map((r) => ({
       title: r.title,
@@ -210,10 +277,18 @@ export class Store {
       provider: r.provider,
       providerId: r.provider_id,
       playedAt: r.played_at,
+      outcome: r.outcome === "skipped" ? "skipped" : "played",
+      listenedMs: r.listened_ms,
     }));
   }
 
-  /** 渲染成喂给 ④「已检索记忆」那一片的文本 */
+  /**
+   * 渲染成喂给 ④「已检索记忆」那一片的文本。
+   *
+   * 跳过的必须显式说出来，而且比听完的更有信息量 ——
+   * 「推了但你几秒就切了」是一条明确的负反馈，
+   * 混在播放记录里说成「播过」会让模型继续往那个方向推。
+   */
   recentPlaysAsContext(limit = 15): string[] {
     const now = Date.now();
     return this.recentPlays(limit).map((p) => {
@@ -222,7 +297,11 @@ export class Store {
         mins < 60 ? `${mins} 分钟前`
         : mins < 1440 ? `${Math.round(mins / 60)} 小时前`
         : `${Math.round(mins / 1440)} 天前`;
-      return `${p.artist} - ${p.title}（${when}）`;
+      if (p.outcome === "skipped") {
+        const secs = Math.round(p.listenedMs / 1000);
+        return `${p.artist} - ${p.title}（${when}，只听了 ${secs} 秒就切走了）`;
+      }
+      return `${p.artist} - ${p.title}（${when}，听完了）`;
     });
   }
 

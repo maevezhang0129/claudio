@@ -154,9 +154,74 @@ function tickClock() {
     `${WEEK[d.getDay()]} · ${pad(d.getDate())}-${MON[d.getMonth()]}-${d.getFullYear()}`;
 }
 
+// ─────────────────────────────── 收听上报
+//
+// 「进了队列」和「真的听了」是两件事。服务端在推荐时只记前者，
+// 后者必须由这里上报 —— 不然第④片会告诉模型「你听过这些」，
+// 而其中大部分你从没点开过。
+//
+// 只累计真正在播的时间：暂停、切到后台都停表，
+// 否则挂着一个暂停的播放器整晚会被记成听了八小时。
+
+let listen = { id: null, ms: 0, since: 0 };
+
+/** 换歌。先把上一首结清，再开始给新的一首计时。 */
+function beginListen(track) {
+  flushListen();
+  listen = { id: track?.providerId ?? null, ms: 0, since: 0 };
+}
+
+function resumeListen() {
+  if (listen.id && !listen.since) listen.since = Date.now();
+}
+
+function pauseListen() {
+  if (listen.since) {
+    listen.ms += Date.now() - listen.since;
+    listen.since = 0;
+  }
+}
+
+/**
+ * 结清并上报。
+ *
+ * duration 取播放器实际媒体的时长，不是曲目元数据的时长 ——
+ * 30 秒试听的元数据时长是整曲的四分钟，按那个算永远不到六成，
+ * 试听放到底也会被判成「跳过」。
+ */
+function flushListen(beacon) {
+  pauseListen();
+  const { id, ms } = listen;
+  listen = { id: null, ms: 0, since: 0 };
+  if (!id || ms < 1000) return;   // 一秒都不到的不值得上报
+
+  const durationMs = Number.isFinite(els.audio.duration)
+    ? Math.round(els.audio.duration * 1000)
+    : undefined;
+  const body = JSON.stringify({ session: SESSION, providerId: id, listenedMs: ms, durationMs });
+
+  // 关页面那一下 fetch 会被取消，sendBeacon 不会
+  if (beacon && navigator.sendBeacon) {
+    navigator.sendBeacon("/api/played", new Blob([body], { type: "application/json" }));
+    return;
+  }
+  api("/api/played", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  }).catch(() => { /* 上报失败不该影响播放 */ });
+}
+
+// 切后台、关页面都要结清 —— 这两种情况下用户显然停止收听了
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) flushListen(true);
+});
+window.addEventListener("pagehide", () => flushListen(true));
+
 // ─────────────────────────────── 播放器 + 队列
 
 function loadQueue(tracks) {
+  flushListen();   // 换一整组之前，先把正在听的那首结清
   state.queue = tracks ?? [];
   state.index = -1;
   renderQueue();
@@ -244,6 +309,7 @@ function play(i) {
   }
 
   state.index = i;
+  beginListen(t);
   els.player.hidden = false;
   els.player.classList.remove("idle");
   setNowPlaying(t);
@@ -283,9 +349,10 @@ els.audio.addEventListener("timeupdate", () => {
     els.tTotal.textContent = mmss(els.audio.duration);
   }
 });
-els.audio.addEventListener("play", syncTransport);
-els.audio.addEventListener("pause", syncTransport);
+els.audio.addEventListener("play", () => { resumeListen(); syncTransport(); });
+els.audio.addEventListener("pause", () => { pauseListen(); syncTransport(); });
 els.audio.addEventListener("ended", () => {
+  flushListen();   // 放到底了，先把这一首结清再往下走
   // 电台会接着往下播
   if (state.index < state.queue.length - 1) return step(1);
   syncTransport();
@@ -349,8 +416,10 @@ async function castCurrent(device) {
         album: t.album, artworkUrl: t.artworkUrl,
       }),
     });
-    // 声音已经交给设备了，本机就该闭嘴 —— 否则同一首歌在屋里放两遍
+    // 声音已经交给设备了，本机就该闭嘴 —— 否则同一首歌在屋里放两遍。
+    // 之后的收听发生在电视上，这边统计不到，所以先结清本机这一段。
     els.audio.pause();
+    flushListen();
     els.castPanel.replaceChildren(el("span", "pf-empty",
       `已投到 ${device.friendlyName}。本机已停止播放。`));
   } catch (e) {

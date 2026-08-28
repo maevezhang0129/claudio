@@ -37,7 +37,7 @@ Open https://localhost:8080. The startup banner also prints a LAN address so you
 can reach it from your phone on the same Wi-Fi.
 
 ```bash
-npm run verify      # 18 pipeline assertions + 13 similarity edge cases — costs nothing
+npm run verify      # 23 pipeline assertions + 24 matching edge cases — costs nothing
 npm run typecheck
 ```
 
@@ -321,6 +321,35 @@ It does not start playing: browsers block autoplay without a gesture anyway, and
 interrupting whatever you are listening to because the clock moved is rude. If
 something is already playing, it only leaves a line in the feed.
 
+### The `plays` table was recording recommendations
+
+A row was written the moment a track entered the queue, and the client never
+reported anything back. So the table held a *recommendation* history wearing a
+*listening* history's name, and fragment ④ told the model "you played these"
+about songs that had never been opened. The profile's Played count said 9 when
+the true number was 0.
+
+Rows now carry an `outcome`. Recommending writes `queued`; the client reports
+what actually happened and it becomes `played` or `skipped`. Fragment ④ drops
+`queued` entirely and spells the other two out:
+
+```
+- 陈奕迅 - 富士山下（12 分钟前，听完了）
+- Beyond - 海阔天空（12 分钟前，只听了 4 秒就切走了）
+```
+
+The skip line is the valuable one. It is the only negative signal anywhere in
+this system — the corpus, the library export and every derived preference all
+describe things the owner likes. "I queued this for you and you killed it in four
+seconds" is the one input that can say otherwise, and rendering it as a play
+throws it away.
+
+Timing accumulates only while audio is actually playing; pausing and
+backgrounding stop the clock, or a paused tab overnight would count as eight
+hours of listening. Duration comes from the media element rather than the track
+metadata: a 30-second preview reports four minutes in its metadata, so measuring
+against that would mark every completed preview as a skip.
+
 ### Learned preferences: `prefs`
 
 `npm run prefs` derives a first pass from the library export. The split from the
@@ -349,6 +378,11 @@ things they cannot express:
   nobody forgot, just alternate takes.
 - **`library.unplayed`** — 16% of the library has never been played, which is a
   measure of appetite for the unfamiliar.
+- **`behaviour.recent`** — the only entry not derived from the Apple export.
+  It reads the `plays` table: how many recommendations were finished, how many
+  were killed, and which artists keep getting killed. It is written only once at
+  least 20 outcomes exist; below that a "you dislike X" computed from four rows
+  is noise, and the model will not doubt its corpus — it will just comply.
 
 It lands in the **volatile** group, not with the corpus. It gets re-derived and
 hand-edited, and a few hundred tokens are not worth invalidating a 5,000-character
@@ -443,7 +477,7 @@ npm run certs                             # 换 WiFi、IP 变了就重跑
 打开 https://localhost:8080。启动横幅还会打印局域网地址，手机连同一 WiFi 可直接访问。
 
 ```bash
-npm run verify      # 18 项管线断言 + 13 条相似度边界用例，不花钱
+npm run verify      # 23 项管线断言 + 24 条匹配边界用例，不花钱
 npm run typecheck
 ```
 
@@ -677,6 +711,33 @@ iOS 只允许在用户手势里发起第一次 `speak()`，所以这个开关同
 而且因为时钟动了就打断你正在听的东西很粗暴。
 已经在播的时候，它只在对话流里留一行。
 
+### `plays` 表一直记的是推荐，不是收听
+
+曲目进队列的那一刻就写一行，而前端从来不上报任何东西。
+于是这张表拿着「收听历史」的名字装着**推荐历史**，
+第④片在告诉模型「你听过这些」—— 而其中大部分从没被点开过。
+资料页的 Played 显示 9，真实数字是 0。
+
+现在每行带一个 `outcome`。推荐时写 `queued`，前端上报实际发生了什么，
+它才变成 `played` 或 `skipped`。第④片直接丢掉 `queued`，
+并把另外两种如实说出来：
+
+```
+- 陈奕迅 - 富士山下（12 分钟前，听完了）
+- Beyond - 海阔天空（12 分钟前，只听了 4 秒就切走了）
+```
+
+有价值的是「切走了」那一行。它是整个系统里**唯一的负反馈** ——
+语料、曲库导出、所有推导出来的偏好，描述的全是喜欢的东西。
+「我推给你，你四秒就切了」是唯一能说出相反意见的输入，
+把它渲染成一次播放，就等于把它扔掉。
+
+计时只在音频真的在播时累加：暂停、切后台都停表，
+否则挂着一个暂停的标签页过夜会被记成听了八小时。
+时长取播放器实际媒体的时长而不是曲目元数据 ——
+30 秒试听的元数据时长是整曲的四分钟，按那个算，
+每一次完整听完的试听都会被判成跳过。
+
 ### 从行为学到的偏好：`prefs`
 
 `npm run prefs` 从曲库导出推出第一版。它和语料的分工是硬的，
@@ -703,6 +764,11 @@ iOS 只允许在用户手势里发起第一次 `speak()`，所以这个开关同
   不滤的话这份名单就只剩 TREASURE 的巡演 setlist 和陶喆的现场专辑，
   那些歌没人忘记，它们只是另一个版本。
 - **`library.unplayed`** —— 16% 的曲目从没播过，这是对陌生东西的胃口。
+- **`behaviour.recent`** —— 唯一不来自 Apple 导出的一条。
+  它读 `plays` 表：推过的里面听完了多少、切掉了多少、哪些艺人反复被切。
+  只有在至少 20 条有结论的记录之后才写 —— 低于这个数，
+  从四行记录上算出来的「你不喜欢 X」是噪声，
+  而模型不会怀疑自己的语料，它只会照做。
 
 它进**易变组**，不跟语料放在一起。它会被重新推导、也会被手改，
 几百 token 不值得让一段 5000 字符的缓存前缀作废。

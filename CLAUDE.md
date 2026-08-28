@@ -24,7 +24,7 @@ code comments; they stay as they are.
 ```bash
 npm run dev:stub    # offline — no API calls, no cost; drives the UI from fixed scripts
 npm run dev         # live — needs a model API key
-npm run verify      # 20 pipeline assertions + 24 matching edge cases; costs nothing
+npm run verify      # 23 pipeline assertions + 24 matching edge cases; costs nothing
 npm run typecheck
 npm run certs       # sign a local TLS cert (needs mkcert); re-run when the LAN IP changes
 npm run netease:api # start the self-hosted NeteaseCloudMusicApi on :3000
@@ -146,6 +146,17 @@ Never make a paid path fire as a side effect of opening a page or polling.
 key separator, which made git treat both as binary — diffs showed nothing. They
 now use the `\u0000` escape: identical at runtime, readable to git and grep.
 Don't put raw control characters in source.
+
+### `plays.outcome` separates recommending from listening
+
+A row is written as `queued` when a track enters the queue, and only becomes
+`played` or `skipped` when the client reports via `POST /api/played`. Fragment ④
+excludes `queued` rows: feeding back "you played this" about a track nobody
+opened is how the model ends up reinforcing a direction the owner never chose.
+
+The skip line is the only negative signal in the whole system — everything else
+(corpus, library export, derived prefs) describes things the owner likes. Do not
+collapse it back into a plain play record.
 
 ### `prefs` and the corpus do not overlap
 

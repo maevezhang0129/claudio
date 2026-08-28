@@ -7,7 +7,7 @@ to you like a late-night DJ.
 Not a recommendation algorithm — a prompt assembler plus a thin layer of API glue.
 All the intelligence lives in the corpus you write; the code just keeps it honest.
 
-**Status: stage ③ — full-track playback, a daily schedule, spoken announcements, and casting to a DLNA device.**
+**Status: stage ③ complete — a mixed music source, a schedule that fires on its own, spoken announcements, and casting to a DLNA device.**
 
 [中文说明见下方](#claudio-中文说明)
 
@@ -145,6 +145,7 @@ Pluggable via `CLAUDIO_MUSIC_PROVIDER`.
 
 | Provider | Status | Cost | Capabilities |
 |---|---|---|---|
+| **`mixed`** | ✅ **recommended** | free | NetEase recognises, iTunes plays — see the measurements below |
 | `itunes` | ✅ implemented | free, no auth | search validation · artwork · 30s preview |
 | `netease` | ✅ implemented | free, self-hosted | best Mandarin catalog · full tracks **with a logged-in cookie** |
 | `applemusic` | not implemented | $99/yr Developer Program + your Apple Music subscription | full playback |
@@ -152,6 +153,37 @@ Pluggable via `CLAUDIO_MUSIC_PROVIDER`.
 iTunes is the right starting point because the `trackId` it returns **is** the
 Apple Music catalog ID — the matching logic carries over unchanged if you ever
 upgrade to MusicKit.
+
+### Measured: three providers, one set of tracks
+
+30 tracks sampled from the owner's library by play count, three runs each. The
+ranges are what matters — a single run of NetEase would have told a much more
+flattering story than the truth.
+
+| Provider | exact /30 | not resolved | playable /30 | median |
+|---|---|---|---|---|
+| `itunes` | 23 (identical all three runs) | 4 | 26 | 173–211 ms |
+| `netease` | **20–26** | **1–8** | **0** | 1308–1656 ms |
+| `mixed` | 24–26 | 1–2 | 27 | 168–197 ms |
+
+Three things fall out of this:
+
+**NetEase is the better catalogue and the less reliable service.** At its best it
+resolves 26/30 against iTunes' 23; at its worst, 20. That spread is the
+reverse-engineered API, not the catalogue — nothing changed between runs.
+iTunes returned byte-identical results all three times.
+
+**`mixed` is never worse than iTunes, and costs nothing in latency.** It asks
+iTunes first and only wakes NetEase when iTunes is unsure, so the 77% of tracks
+iTunes already nails skip the slow path entirely. It also inherits iTunes'
+stability rather than NetEase's variance.
+
+**The first version of `mixed` was worse than iTunes alone**, and only a test
+caught it. It asked NetEase first and used its canonical name to look up audio;
+for 「买辣椒也用券 - 起风了」 NetEase canonicalises to a 20-artist karaoke upload
+that iTunes has never heard of, so the track went from playable to silent.
+Starting from iTunes and treating NetEase as a second opinion makes the
+improvement strictly additive.
 
 ### NetEase: read the cookie note before you switch
 
@@ -162,7 +194,9 @@ CLAUDIO_MUSIC_PROVIDER=netease npm run dev
 
 Search and metadata work fine anonymously, and the Mandarin catalog really is
 better — `陈奕迅 富士山下` comes back first, where iTunes needs the similarity
-threshold to find it.
+threshold to find it. (An earlier note here quoted 87% against 77% from a single
+run; the table above replaces it with the three-run range, which is 20–26 out of
+30 against a flat 23.)
 
 **Playback does not.** Measured anonymously against the live API: `privilege.pl`
 is `0` for every top hit, and `/song/url` returns `url: null` across the board —
@@ -178,57 +212,39 @@ covers before anything else, because JVR's catalog is no longer licensed there),
 and its search is fuzzy enough that a fabricated title can match a real upload.
 That second one forced a real fix — see below.
 
-### The alternate path needed a second gate
+### Two bugs the hallucination filter was hiding
 
-NetEase's looser search exposed a hole that iTunes never triggered: a fabricated
-title that *contains* a real one ("永夜的第七章序曲" wraps the real "夜的第七章")
-scores 0.81 on similarity, comfortably over the 0.72 threshold, and leaked
-through as an `alternate`.
+NetEase's looser search exposed a hole: a fabricated title that *contains* a real
+one — the invented 「永夜的第七章序曲」 wraps the real 「夜的第七章」 — scores 0.81
+on similarity, over the 0.72 threshold, and leaked through.
 
-Similarity alone can't catch it. So when the artist doesn't corroborate — the
-`alternate` path, and only there — the match now also has to clear a **length
-ratio** floor of 0.8. Traditional/simplified pairs are the same length and pass;
-a title wrapped in extra words is 0.625 and doesn't. Five new `verify` cases pin
-the boundary.
+Similarity cannot catch that on its own, so a match must now also clear a
+**length-ratio floor of 0.8**. Traditional/simplified pairs are the same length
+and pass; a title padded with extra words is 0.5–0.63 and does not.
 
-**Why not Spotify:** since February 2026, registering a Spotify developer app
-requires the account to hold an active Premium subscription, and Development Mode
-is capped at one client ID and five authorized users.
+The floor was first installed only on the `alternate` path, on the reasoning that
+containment is trustworthy when the artist agrees. That reasoning was wrong, and
+the test for `mixed` proved it: what a model actually fabricates is a **real
+artist with a padded title**, so the artist always agrees and the match sailed
+through the first pass. The floor now applies to both passes.
 
-## Brain
+Chasing that down turned up something worse, present since the first commit:
 
-`CLAUDIO_BRAIN` picks the provider, `CLAUDIO_MODEL` the tier. `stub` runs
-offline for free.
+```
+normalize("Soft Spot")  ->  "so"
+```
 
-Measured over six turns each, same prompts, tracks resolved against the catalog
-so the hallucination figure is real rather than eyeballed:
+The `feat.` stripper was written as `/\s*(feat\.?|ft\.?|…)\s+.+$/i`. With `\s*`
+accepting zero whitespace, the `ft` inside "So**ft** Spot" read as a featuring
+marker and everything after it was discarded. Exactly one track in the owner's
+library is affected — and it is the second most-played one, at 77 plays. Because
+the invented "Soft Spot in the Rain" also collapsed to `"so"`, the two were
+*identical* after normalisation and scored 1.000.
 
-| Tier | Median | Exact match | Hallucinated | Per turn |
-|---|---|---|---|---|
-| **`glm-4.5-air`** (default) | **5.3s** | **94%** | 6% | $0.00055 |
-| `glm-4.7-flashx` | 28.6–63.9s | 82% | 0% | $0.00033 |
-| `glm-4.7` | 10.8s | 87% | 7% | $0.00180 |
-| `glm-4.7-flash` | 30–53s, 1-in-5 succeed | — | — | free |
-
-`glm-4.5-air` wins on both speed and accuracy for about ¥1/month more than the
-cheapest usable tier. `flashx` posts a 0% hallucination rate but 18% alternates —
-right title, wrong artist — which is worse than nothing, because it looks like a
-success. Avoid `glm-4.7-flash`: nominally free, but it runs on shared capacity
-and is too slow and too congested for an interactive interface.
-
-Zhipu gives new accounts 25M tokens, which covers the paid tiers. At ~3,300
-tokens a turn that is roughly a year at 20 turns a day, so there is no reason to
-top up before measuring. Cheaper models fabricate more tracks — but fabrications get caught
-by `resolve()`, so the failure mode is "fewer recommendations," never "fake
-recommendations." Watch the `dropped` counter in the UI; it is a direct measure
-of hallucination rate, and the honest way to decide whether a paid tier earns its
-price.
-
-GLM, DeepSeek and Kimi share one implementation (`src/brain/openai-compat.ts`)
-because all three speak the OpenAI chat format. It asks for `json_object` mode,
-restates the schema in the prompt, validates the reply with Zod, and retries once
-with the validation error fed back — none of those providers guarantee strict
-`json_schema`, so the client cannot assume the response is well-formed.
+Requiring whitespace before the Latin markers fixes it. The Chinese markers 与/和
+keep the opposite guard — whitespace is required *after* them, or 「我和我的祖国」
+would truncate to 「我」. Eight `normalize` cases and eight length-ratio cases now
+pin both boundaries.
 
 ## The station (stage ③)
 
@@ -289,6 +305,56 @@ explicit `POST`. `GET` reads the stored plan and is free; the UI polls that
 freely and puts the spend behind a button. Re-posting returns the cached plan
 unless you pass `force`.
 
+### The timetable fires on its own
+
+The scheduler books the slots; a one-minute ticker is what actually *starts*
+them. It recomputes which slot the clock is in and compares it to the previous
+minute — deliberately dumb, and deliberately not a set of pre-armed timers:
+`routines.md` gets edited, and a laptop sleeps. Polling the wall clock survives
+both; a `setTimeout` armed six hours ago survives neither.
+
+The ticker never plans. Planning calls the model and costs money, and that has to
+be the result of someone pressing a button, not of a clock reaching a mark.
+
+On handoff the client loads that slot's lineup into the queue and stops there.
+It does not start playing: browsers block autoplay without a gesture anyway, and
+interrupting whatever you are listening to because the clock moved is rude. If
+something is already playing, it only leaves a line in the feed.
+
+### Learned preferences: `prefs`
+
+`npm run prefs` derives a first pass from the library export. The split from the
+corpus is strict, and it is the point:
+
+| Where | What belongs there |
+|---|---|
+| `user/taste.md` | what only you know — why you like it, when not to play it |
+| `user/library.md` | the distilled picture — top artists, genres, eras, loops |
+| `prefs` | what only arithmetic knows |
+
+So `prefs` deliberately repeats none of `library.md`'s charts. It stores the
+things they cannot express:
+
+- **`artist.deep`** — plays *divided by* track count. TREASURE has 540 plays
+  spread over 56 tracks; keshi has 256 over 8. One of those is collecting a
+  group, the other is wearing eight songs out. A single ranked list flattens the
+  difference; the ratio keeps it.
+- **`artist.shallow`** — the other end of that ratio. Saved a lot, played little,
+  so don't treat them as strong signal.
+- **`track.dormant`** — `taste.md` says outright that never-played ≠ disliked, but
+  `library.md` only reports the count (103). This names them. Two filters earn
+  their place: titles carrying a version marker are excluded, and so is anything
+  whose normalised title duplicates a played track by the same artist. Without
+  them the list is nothing but TREASURE's tour set and 陶喆's live album — songs
+  nobody forgot, just alternate takes.
+- **`library.unplayed`** — 16% of the library has never been played, which is a
+  measure of appetite for the unfamiliar.
+
+It lands in the **volatile** group, not with the corpus. It gets re-derived and
+hand-edited, and a few hundred tokens are not worth invalidating a 5,000-character
+cached prefix over. `GET /api/prefs` and `PUT /api/prefs/:key` make it editable
+without SQL; two assertions keep it out of the stable group.
+
 ### Cast: play it out loud
 
 `src/cast/upnp.ts` speaks SSDP and AVTransport directly — a UDP multicast
@@ -310,11 +376,10 @@ parsing, and the SOAP round-trip (`GetTransportInfo` → `NO_MEDIA_PRESENT`).
 - [x] **Stage ①** conversational recommendation · hallucination filter · 30s previews
 - [x] **Stage ②** full-track playback — via NetEase, not MusicKit ([why](#netease-read-the-cookie-note-before-you-switch))
 - [x] **Stage ③** scheduler · spoken announcements · weather/calendar · UPnP cast
-- [ ] `prefs` — preferences learned from behaviour, merged with the hand-written corpus
+- [x] `prefs` — preferences derived from behaviour, alongside the hand-written corpus
 
-The `plan` table and the `/api/plan/today` contract were reserved in stage ①, so
-the scheduler landed without a schema migration. `prefs` is still empty and is
-the one reserved piece not yet used.
+Every table and contract reserved in stage ① is now in use, and none of them
+needed a schema migration to get there.
 
 ## Known limits
 
@@ -331,8 +396,12 @@ the one reserved piece not yet used.
 - The NetEase provider needs a logged-in cookie to play anything at all, and the
   self-hosted API it depends on is reverse-engineered — it can break without
   notice. See the provider section above.
-- The scheduler plans; nothing yet *fires* at the start of a slot. The lineup is
-  there when you open the app, but it will not wake you up.
+- A slot handoff loads the lineup into the queue but never starts playback, so
+  the station still needs you to press play. Browsers block autoplay without a
+  gesture, and this is the honest version of that constraint rather than a
+  workaround for it.
+- `mixed` inherits NetEase's dependency: if the self-hosted API is down, it
+  degrades to plain iTunes rather than failing, but you lose the recall it adds.
 - Casting was verified read-only against a real renderer (discovery, description,
   `GetTransportInfo`). `SetAVTransportURI` + `Play` follow the same SOAP path but
   were deliberately not fired — that makes a television in someone's living room
@@ -349,7 +418,7 @@ the one reserved piece not yet used.
 它不是推荐算法，而是**一个 prompt 组装器加一层薄薄的 API 胶水**。全部智能都在
 你自己写的语料里，代码只负责让它保持诚实。
 
-**当前状态：阶段③ —— 整曲播放、当日排期、语音播报、投到 DLNA 设备外放。**
+**当前状态：阶段③ 完成 —— 混合音源、会自己到点换档的排期、语音播报、投到 DLNA 设备外放。**
 
 ## 快速开始
 
@@ -455,12 +524,40 @@ alternate 一律降级到队列末尾，且每次回复最多保留一首。
 
 | provider | 状态 | 成本 | 能力 |
 |---|---|---|---|
+| **`mixed`** | ✅ **推荐** | 免费 | 网易云认歌、iTunes 出声 —— 实测见下 |
 | `itunes` | ✅ 已实现 | 免费、零鉴权 | 搜索校验 · 封面 · 30 秒试听 |
 | `netease` | ✅ 已实现 | 免费，需自建 | 华语曲库最全 · **带登录 cookie 才能整曲播放** |
 | `applemusic` | 未实现 | $99/年 Developer Program + 你的 Apple Music 订阅 | 整曲播放 |
 
 选 iTunes 起步的理由：它返回的 `trackId` **就是** Apple Music catalog ID，
 将来若升级 MusicKit，匹配逻辑可以原样继承。
+
+### 实测：三个 provider，同一批曲目
+
+从曲库里按播放次数取样 30 首，每个 provider 跑三轮。**要看的是区间** ——
+只跑一轮的话，网易云会给出一个比事实好看得多的故事。
+
+| provider | exact /30 | 解析不到 | 可播 /30 | 中位耗时 |
+|---|---|---|---|---|
+| `itunes` | 23（三轮完全一致） | 4 | 26 | 173–211 ms |
+| `netease` | **20–26** | **1–8** | **0** | 1308–1656 ms |
+| `mixed` | 24–26 | 1–2 | 27 | 168–197 ms |
+
+三个结论：
+
+**网易云是更好的曲库，也是更不可靠的服务。** 状态好的时候 26/30，
+比 iTunes 的 23 强；状态差的时候 20。这个跨度来自那套逆向接口本身 ——
+两轮之间什么都没改。iTunes 三轮返回的结果一字不差。
+
+**`mixed` 不会比 iTunes 差，而且不额外付延迟。** 它先问 iTunes，
+只在 iTunes 没把握时才叫醒网易云，于是 iTunes 本来就能搞定的那 77%
+完全不走慢路径。稳定性也跟着 iTunes 走，而不是跟着网易云的方差走。
+
+**`mixed` 的第一版比单用 iTunes 还差**，是测试抓出来的。
+那一版先问网易云、再拿它的规范名去换音源；
+「买辣椒也用券 - 起风了」被网易云归一化成一个 20 人合唱的翻唱上传，
+iTunes 根本没听说过这个东西，于是这首歌从「能播」变成了「哑的」。
+改成以 iTunes 打底、网易云只当第二意见之后，网易云带来的就只有加法。
 
 ### 网易云：切过去之前先看 cookie 这一段
 
@@ -470,7 +567,8 @@ CLAUDIO_MUSIC_PROVIDER=netease npm run dev
 ```
 
 匿名状态下搜索和元数据都正常，华语曲库确实更全 —— 搜「陈奕迅 富士山下」
-第一条就是原版，iTunes 那边要靠相似度兜。
+第一条就是原版，iTunes 那边要靠相似度兜。（这里早先引过「87% 对 77%」，
+那是单轮数字；上面那张表用三轮区间取代了它 —— 实际是 20–26 对稳定的 23。）
 
 **但播不了。** 对着真实接口实测：热门结果的 `privilege.pl` 全是 0，
 `/song/url` 一律返回 `url: null`，连没有明显版权问题的歌也一样。
@@ -483,47 +581,35 @@ CLAUDIO_MUSIC_PROVIDER=netease npm run dev
 以及它的搜索松到能让一个编造的曲名匹配上真实条目 ——
 后面这条逼出了一个真的修复。
 
-### alternate 那条路需要第二道闸
+### 幻觉过滤器藏着的两个 bug
 
-网易云更松的搜索暴露了一个 iTunes 从没触发过的洞：
-一个**包着**真实曲名的编造曲名（「永夜的第七章序曲」裹着真实的「夜的第七章」）
-相似度能拿到 0.81，稳稳越过 0.72 的阈值，被当成 alternate 放行。
+网易云更松的搜索暴露了一个洞：一个**包着**真实曲名的编造曲名
+（「永夜的第七章序曲」裹着真实的「夜的第七章」）相似度 0.81，
+越过 0.72 的阈值被放行。
 
-光靠相似度拦不住。所以当艺人对不上时 —— 也就是 alternate 那条路，且只在那里
-—— 匹配还必须再过一道 **长度比** 0.8 的闸。繁简对是等长的，能过；
-被额外的词裹起来的曲名是 0.625，过不去。新增 5 条 verify 用例把边界钉死。
+光靠相似度拦不住，所以匹配现在还必须过一道 **长度比 0.8** 的闸。
+繁简对等长，能过；被额外的词裹起来的曲名是 0.5–0.63，过不去。
 
-**为什么不是 Spotify**：2026 年 2 月起，注册 Spotify 开发者应用的账号必须持有
-Premium 订阅，且 Development Mode 限 1 个 Client ID、5 个授权用户。
+这道闸最初只装在 alternate 那条路上，理由是「艺人对上时包含是可信的」。
+那个理由是错的，给 `mixed` 写的测试证明了这一点：模型真正会编的，
+恰恰是**真艺人 + 加了料的曲名** —— 那种情况艺人当然对得上，
+于是从第一趟就大摇大摆走了过去。现在两趟都过闸。
 
-## 大脑
+顺着查下去还翻出一个更糟的，从初版就在：
 
-`CLAUDIO_BRAIN` 选厂商，`CLAUDIO_MODEL` 选档位，`stub` 离线免费。
+```
+normalize("Soft Spot")  ->  "so"
+```
 
-每档各跑 6 轮相同提示词，曲目全部送去曲库解析，所以幻觉率是实测不是目测：
+剥 `feat.` 的那条正则写成了 `/\s*(feat\.?|ft\.?|…)\s+.+$/i`。
+`\s*` 允许零个空白，于是「So**ft** Spot」里的 `ft` 被当成合唱标记，
+后面全被丢掉。这个库里只有一首歌中招 —— 正好是播放次数第二高的那首，77 次。
+而编造的「Soft Spot in the Rain」也同样塌成 `"so"`，
+两者归一化后**完全相同**，相似度 1.000。
 
-| 档位 | 中位耗时 | 精确匹配 | 幻觉 | 每轮 |
-|---|---|---|---|---|
-| **`glm-4.5-air`**（默认） | **5.3s** | **94%** | 6% | $0.00055 |
-| `glm-4.7-flashx` | 28.6–63.9s | 82% | 0% | $0.00033 |
-| `glm-4.7` | 10.8s | 87% | 7% | $0.00180 |
-| `glm-4.7-flash` | 30–53s，成功率 1/5 | — | — | 免费 |
-
-`glm-4.5-air` 速度和准确率都最好，每月只比最便宜的可用档多约 ¥1。
-`flashx` 幻觉率 0% 看着漂亮，但有 18% 的 alternate —— 曲名对、艺人不对 ——
-那比直接编还糟，因为它看起来像成功了。
-别用 `glm-4.7-flash`：名义免费，但走共享容量，对交互界面来说太慢也太挤。
-
-智谱给新账号 2500 万 token，可用于付费档。按每轮约 3300 token 算，
-20 轮/天够用一年左右 —— 所以没必要在测够之前就充值。
-越便宜的模型越容易编歌，但编的会被 `resolve()` 拦掉，失败表现是「推荐变少」，
-绝不会是「推荐了假歌」。界面上的 `dropped` 计数就是幻觉率的直接度量，
-也是判断某个付费档值不值这个钱的唯一诚实依据。
-
-GLM / DeepSeek / Kimi 共用一个实现（`src/brain/openai-compat.ts`），因为三家
-都讲 OpenAI 的 chat 格式。它要求 `json_object` 模式、在提示词里重述 schema、
-用 Zod 校验、失败时把错误回灌重试一次 —— 这三家都不保证严格 `json_schema`，
-客户端不能假设返回一定合规。
+要求英文标记前面必须有空白就修好了。中文的 与/和 保留相反的约束 ——
+它们后面必须有空白，否则「我和我的祖国」会被截成「我」。
+现在 8 条 normalize 用例和 8 条长度比用例把两边的边界都钉死了。
 
 ## 电台本身（阶段③）
 
@@ -575,6 +661,54 @@ iOS 只允许在用户手势里发起第一次 `speak()`，所以这个开关同
 `GET` 只读库、免费，前端可以随便轮询，把花钱那一步放在按钮后面。
 重复 POST 会直接返回已有的计划，除非带 `force`。
 
+### 节目表会自己到点
+
+调度器负责**排**，真正让它**开始**的是一个一分钟的触发器。
+它每分钟重算一次「现在属于哪一档」，和上一分钟比。
+刻意写得笨，也刻意不用预先排好的定时器：`routines.md` 随时会改，
+笔记本会睡眠。每分钟看一眼墙上的钟，这两件事都扛得住；
+六小时前排下的 `setTimeout` 一件都扛不住。
+
+触发器永远不排期。排期要调模型、要花钱，
+那必须是人按下按钮的结果，不能是时钟走到某一格的结果。
+
+换档时前端把那一档的节目单载进队列，然后就停在那儿。
+它不会自动开始播：浏览器本来就不允许无手势自动播放，
+而且因为时钟动了就打断你正在听的东西很粗暴。
+已经在播的时候，它只在对话流里留一行。
+
+### 从行为学到的偏好：`prefs`
+
+`npm run prefs` 从曲库导出推出第一版。它和语料的分工是硬的，
+而这正是重点：
+
+| 在哪 | 该写什么 |
+|---|---|
+| `user/taste.md` | 只有你知道的事 —— 为什么喜欢、什么时候不听 |
+| `user/library.md` | 蒸馏出的画像 —— 常听艺人、曲风、年代、循环榜 |
+| `prefs` | 只有算术知道的事 |
+
+所以 `prefs` 刻意不重复 `library.md` 的任何一张榜，只存它们表达不了的东西：
+
+- **`artist.deep`** —— 播放次数**除以**曲目数。TREASURE 播了 540 次，
+  摊在 56 首上；keshi 播了 256 次，只有 8 首。
+  一个是「收藏了一个团」，一个是「这八首听到烂」。
+  单一排行榜会把这两种喜欢压平，比值把它们分开。
+- **`artist.shallow`** —— 同一个比值的另一端。收得多播得少，
+  不该被当成强信号。
+- **`track.dormant`** —— `taste.md` 明确写了「没播放过 ≠ 不喜欢」，
+  但 `library.md` 只给了个数字（103 首）。这里把它们点名。
+  两道过滤是必须的：曲名带版本标记的排除，
+  归一化后与同一艺人某首播过的歌重名的也排除 ——
+  不滤的话这份名单就只剩 TREASURE 的巡演 setlist 和陶喆的现场专辑，
+  那些歌没人忘记，它们只是另一个版本。
+- **`library.unplayed`** —— 16% 的曲目从没播过，这是对陌生东西的胃口。
+
+它进**易变组**，不跟语料放在一起。它会被重新推导、也会被手改，
+几百 token 不值得让一段 5000 字符的缓存前缀作废。
+`GET /api/prefs` 和 `PUT /api/prefs/:key` 让它不用写 SQL 就能改；
+两条断言守着它不进稳定组。
+
 ### 外放：让它在屋里响
 
 `src/cast/upnp.ts` 直接讲 SSDP 和 AVTransport —— 先用 UDP 组播发一个 M-SEARCH
@@ -594,10 +728,9 @@ DIDL-Lite 元数据一起带过去，这样电视屏幕上显示的是曲名和�
 - [x] **阶段①** 对话推荐 · 幻觉过滤 · 30 秒试听
 - [x] **阶段②** 整曲播放 —— 走网易云，不是 MusicKit（[原因](#网易云切过去之前先看-cookie-这一段)）
 - [x] **阶段③** 调度器 · 语音播报 · 天气/日程注入 · UPnP 外放
-- [ ] `prefs` —— 从行为里学到的偏好，与手写语料合并
+- [x] `prefs` —— 从行为里推导的偏好，与手写语料并列
 
-`plan` 表和 `/api/plan/today` 契约在阶段①就预留好了，所以调度器落地时
-一次 schema 迁移都不需要。`prefs` 还是空的，是唯一一处预留了但还没用上的地方。
+阶段①预留的表和契约现在全部用上了，而且没有一处需要 schema 迁移。
 
 ## 已知边界
 
@@ -610,8 +743,10 @@ DIDL-Lite 元数据一起带过去，这样电视屏幕上显示的是曲名和�
   （AirDrop 传 `rootCA.pem` → 安装描述文件 → 证书信任设置里打开）。
 - 网易云 provider 不带登录 cookie 就一首也播不了，且它依赖的自建服务是逆向的，
   随时可能失效。见上面 provider 那一节。
-- 调度器只负责**排**，还没有东西在时段开始时**触发**。
-  节目表在你打开应用时就在那儿，但它不会主动叫醒你。
+- 换档只把节目单载进队列，不会开始播 —— 电台仍然需要你按一下。
+  浏览器本来就不允许无手势自动播放，这是如实呈现那个限制，不是绕过它。
+- `mixed` 继承了网易云那份依赖：自建服务挂掉时它会退化成纯 iTunes 而不是报错，
+  但网易云带来的那部分召回也就没了。
 - 外放只做了只读验证（发现、描述解析、`GetTransportInfo`）。
   `SetAVTransportURI` + `Play` 走的是同一条 SOAP 路径，但故意没有真的发出去 ——
   那会让别人客厅里的电视突然开始放歌。

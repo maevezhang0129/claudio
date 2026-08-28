@@ -24,10 +24,11 @@ code comments; they stay as they are.
 ```bash
 npm run dev:stub    # offline — no API calls, no cost; drives the UI from fixed scripts
 npm run dev         # live — needs a model API key
-npm run verify      # 18 pipeline assertions + 13 similarity edge cases; costs nothing
+npm run verify      # 20 pipeline assertions + 24 matching edge cases; costs nothing
 npm run typecheck
 npm run certs       # sign a local TLS cert (needs mkcert); re-run when the LAN IP changes
 npm run netease:api # start the self-hosted NeteaseCloudMusicApi on :3000
+npm run prefs       # derive prefs from the library export; --show to print what is stored
 ```
 
 Node 25 runs TypeScript natively — there is no build step.
@@ -36,8 +37,11 @@ Node 25 runs TypeScript natively — there is no build step.
 
 Four layers. Two of them are pluggable adapters; keep them that way.
 
-- **`MusicProvider`** (`src/music/types.ts`) — `itunes` and `netease` implemented;
-  `applemusic` is a declared case that throws with an explanation.
+- **`MusicProvider`** (`src/music/types.ts`) — `itunes`, `netease` and `mixed`
+  implemented; `applemusic` is a declared case that throws with an explanation.
+  `mixed` composes the other two and must stay that way: iTunes answers first and
+  NetEase is only a second opinion, so `mixed` can never score worse than iTunes.
+  Reversing that order made it worse — see the README.
 - **`BrainAdapter`** (`src/brain/types.ts`) — `claude` and `stub`; adding GLM /
   DeepSeek / Kimi means one new implementation plus a case in
   `src/brain/index.ts`. Nothing above the factory changes.
@@ -48,12 +52,15 @@ The model always returns `{say, play[], reason, segue}` (`DJResponseSchema`).
 Stage ① only renders three of those fields; `segue` is a placeholder that feeds
 the TTS pipeline in stage ③. **Do not change the shape** to fit a stage-① need.
 
-### `verify` must never touch the network
+### Keep `assemble()` free of I/O it doesn't need
 
-`npm run verify` promises to cost nothing and to be deterministic. That is why
-weather and calendar are fetched in `server.ts` and passed *into* `assemble()`
-rather than being fetched inside it — `assemble()` stays callable offline.
-Keep it that way when adding to fragment ③.
+`npm run verify` calls `assemble()` repeatedly, so weather, calendar and prefs
+are all resolved in `server.ts` and passed *in* rather than fetched inside.
+Assertions then read fixed values instead of whatever the sky is doing.
+
+Note this is about determinism, not about the network in general — `verify` does
+call the iTunes API to resolve tracks, and that is intended. It costs nothing and
+it is the only way to test the hallucination filter against a real catalogue.
 
 ### Context assembly: stable vs volatile
 
@@ -84,13 +91,25 @@ Collapse them and the model invents a forecast.
 that as a hallucination is wrong; pretending it matched is also wrong.
 Alternates are demoted to the end of the queue and capped at `MAX_ALTERNATES`.
 
-### `alternate` has a second gate: length ratio
+### Matching has a second gate: `TITLE_LENGTH_FLOOR`
 
 Similarity alone does not stop a fabricated title that *contains* a real one —
 「永夜的第七章序曲」 wraps 「夜的第七章」 and scores 0.81, over the 0.72 threshold.
-When the artist does **not** corroborate (the `alternate` path only), the match
-must also clear `ALT_LENGTH_FLOOR` (0.8). Both providers apply it; five `verify`
-cases pin the boundary. Do not relax it to make a specific song match.
+Every candidate must also clear a normalised length ratio of 0.8.
+
+It applies to **both** passes. It was originally on the `alternate` path only,
+reasoning that containment is safe when the artist agrees; that was wrong. What a
+model fabricates is a real artist with a padded title, so the artist always agrees
+and it passed on the first try. Do not narrow it back.
+
+### `normalize()` must not eat the title
+
+Stripping decorations too eagerly is worse than not stripping. `/\s*(feat|ft)\s+/`
+turned "Soft Spot" into "so", because the `ft` inside the word matched with zero
+leading whitespace — and "so" is identical to what a fabricated "Soft Spot in the
+Rain" collapses to. Latin markers require whitespace **before**; 与/和 require
+whitespace **after**, or 「我和我的祖国」 truncates to 「我」. Eight `verify` cases
+pin this.
 
 ### Similarity thresholds are load-bearing
 
@@ -127,6 +146,17 @@ Never make a paid path fire as a side effect of opening a page or polling.
 key separator, which made git treat both as binary — diffs showed nothing. They
 now use the `\u0000` escape: identical at runtime, readable to git and grep.
 Don't put raw control characters in source.
+
+### `prefs` and the corpus do not overlap
+
+`user/taste.md` holds what only the owner knows. `user/library.md` holds the
+distilled statistics. `prefs` holds what neither can express — ratios, and the
+specific dormant tracks `library.md` only counts. When adding a `prefs` key, check
+it is not already answerable from `library.md`; duplicating it costs tokens every
+turn and gives the model two sources that can disagree.
+
+`prefs` goes in the volatile group. It is re-derived and hand-edited, and a few
+hundred tokens never justify invalidating the cached prefix.
 
 ## Privacy
 

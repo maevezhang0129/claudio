@@ -375,6 +375,38 @@ export class Store {
     return rows.map((r) => ({ key: r.key, value: r.value, updatedAt: r.updated_at }));
   }
 
+  /**
+   * 收听行为的聚合，给 npm run prefs 用。
+   *
+   * 只看有结论的行（听完 / 跳过），queued 的不算 —— 它们什么也没说明。
+   */
+  outcomeStats(): {
+    played: number;
+    skipped: number;
+    skippedArtists: Array<{ artist: string; n: number }>;
+    playedArtists: Array<{ artist: string; n: number }>;
+  } {
+    const count = (outcome: string) =>
+      (this.db
+        .prepare("SELECT COUNT(*) AS n FROM plays WHERE outcome = ?")
+        .get(outcome) as { n: number }).n;
+
+    const byArtist = (outcome: string) =>
+      this.db
+        .prepare(
+          `SELECT artist, COUNT(*) AS n FROM plays WHERE outcome = ?
+           GROUP BY artist ORDER BY n DESC, artist ASC LIMIT 8`,
+        )
+        .all(outcome) as Array<{ artist: string; n: number }>;
+
+    return {
+      played: count("played"),
+      skipped: count("skipped"),
+      skippedArtists: byArtist("skipped"),
+      playedArtists: byArtist("played"),
+    };
+  }
+
   deletePref(key: string): void {
     this.db.prepare(`DELETE FROM prefs WHERE key = ?`).run(key);
   }

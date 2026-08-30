@@ -37,7 +37,7 @@ Open https://localhost:8080. The startup banner also prints a LAN address so you
 can reach it from your phone on the same Wi-Fi.
 
 ```bash
-npm run verify      # 25 pipeline assertions + 24 matching edge cases — costs nothing
+npm run verify      # 29 pipeline assertions + 24 matching edge cases — costs nothing
 npm run typecheck
 ```
 
@@ -404,6 +404,54 @@ hand-edited, and a few hundred tokens are not worth invalidating a 5,000-charact
 cached prefix over. `GET /api/prefs` and `PUT /api/prefs/:key` make it editable
 without SQL; two assertions keep it out of the stable group.
 
+### The station has to bring you something new
+
+An early version recommended almost entirely from the library. That is the safe
+answer and the useless one: those are the songs you already play yourself.
+
+The rule lives in the persona, but stating it there did nothing — the persona is
+a long document and "at least two unfamiliar artists" is a countable constraint
+buried in prose. Restating it as the **last** section of the volatile group, at
+the very end of the prompt, moved a turn from 3 library-only tracks to 6 with
+genuinely new names in them.
+
+Asking is still not enough, because **the model cannot tell what is familiar**.
+It will write "Taylor Swift is an out-of-library pick" about an artist with 186
+plays. That is not dishonesty: checking a name against a chart it read thousands
+of tokens ago is exactly what a small model is bad at.
+
+So the constraint is stated by the prompt and *verified by code*.
+`src/context/library.ts` parses the artist names out of `library.md`, the server
+counts how many queued tracks are by someone not on those charts, and the count
+is fed back into the next turn's requirements — "you only gave 1 last time" does
+more than any wording. It costs no extra call.
+
+The count is taken on the **final queue**, not the resolved candidates. Counting
+candidates produced "6 out-of-library" beside a 3-track queue, and fed an
+inflated number back to a model that then believed it had already complied.
+
+### Every queued track plays inside Claudio
+
+A track that resolves but has no audio — NetEase knows it, iTunes does not, and
+no cookie is set — used to enter the queue and open the NetEase website when
+clicked. A station that throws you out to another app is not a station. Those are
+now dropped and counted separately from hallucinations, because they are a
+different failure: the song is real, it just cannot be heard here.
+
+The bar is a playable source of any kind. Without a NetEase cookie that is a
+30-second preview for nearly everything; full-length audio still needs the cookie.
+
+### Floating radio
+
+`FLOAT` opens the clock, the current track and the transport in a Document
+Picture-in-Picture window — the one way a web page can put DOM in a window that
+stays above other applications. It is the shape this project always implied and
+it needs no Electron shell.
+
+The panel is **moved** into that window rather than cloned, so every existing
+element reference and event handler keeps working and the two views cannot drift
+apart. `<audio>` stays in the main document: moving it stops playback.
+
 ### Cast: play it out loud
 
 `src/cast/upnp.ts` speaks SSDP and AVTransport directly — a UDP multicast
@@ -502,7 +550,7 @@ npm run certs                             # 换 WiFi、IP 变了就重跑
 打开 https://localhost:8080。启动横幅还会打印局域网地址，手机连同一 WiFi 可直接访问。
 
 ```bash
-npm run verify      # 25 项管线断言 + 24 条匹配边界用例，不花钱
+npm run verify      # 29 项管线断言 + 24 条匹配边界用例，不花钱
 npm run typecheck
 ```
 
@@ -811,6 +859,51 @@ plays 表里都没有那一行：UPDATE 一行都没命中，接口却照样返�
 几百 token 不值得让一段 5000 字符的缓存前缀作废。
 `GET /api/prefs` 和 `PUT /api/prefs/:key` 让它不用写 SQL 就能改；
 两条断言守着它不进稳定组。
+
+### 电台必须带来你没有的东西
+
+早先的版本几乎只从曲库里推。那是最安全的答案，也是最没用的 ——
+那些歌你自己就会放。
+
+这条规则本来写在人设里，但写了等于没写：人设是一大段文字，
+而「至少两首陌生艺人」是个可数的约束，埋在散文中间没有分量。
+把它**重申在易变组的最后一节**（也就是整个 prompt 的末尾）之后，
+同一句话从「3 首全是库里的」变成了「6 首，里面有真正的新名字」。
+
+但光靠说还不够，因为**模型判断不了什么叫熟悉**。它会一边写着
+「Taylor Swift 是库外推荐」，一边推着一个你播过 186 次的艺人。
+这不是撒谎 —— 把一个名字和几千 token 之前读过的榜单逐条比对，
+恰恰是小模型做不好的事。
+
+所以：**约束由提示词提出，由代码核对。**
+`src/context/library.ts` 从 `library.md` 里解析出艺人名，
+服务端数清楚队列里有几首的艺人不在那些榜上，
+再把这个数回灌进下一轮的要求 ——「你上一轮只给了 1 首」
+比任何措辞都管用，而且不额外花一次调用。
+
+这个数必须在**最终队列**上数，不能在解析出的候选集上数。
+数候选集会得到「库外 6 首」配一个 3 首的队列，
+还会把一个虚高的数字回灌给模型，让它以为自己已经做到了。
+
+### 队列里的每一首都在 Claudio 里播
+
+一首解析成功但没有音源的歌 —— 网易云认得、iTunes 没有、又没配 cookie ——
+以前会进队列，点下去跳去网易云网页。**一个会把你踢出去的电台不是电台。**
+它们现在被丢弃，并且和幻觉分开计数，因为性质不同：
+歌是真的，只是在这里听不到。
+
+门槛是「有任何一种可播音源」。没有网易云 cookie 时，
+这对绝大多数歌意味着 30 秒试听；整曲仍然需要那个 cookie。
+
+### 悬浮电台
+
+`FLOAT` 把时钟、当前曲目和走带放进一个 Document Picture-in-Picture 窗口 ——
+那是网页唯一能把 DOM 放进**始终浮在其他应用之上**的窗口的办法。
+这是这个项目一直隐含的形态，而且不需要套一层 Electron。
+
+面板是**搬**进那个窗口的，不是复制过去的：这样所有已有的元素引用和
+事件监听都继续有效，两边不可能各说各话。`<audio>` 留在主文档 ——
+一搬动播放就断了。
 
 ### 外放：让它在屋里响
 

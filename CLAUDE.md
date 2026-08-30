@@ -179,6 +179,15 @@ turn and gives the model two sources that can disagree.
 `prefs` goes in the volatile group. It is re-derived and hand-edited, and a few
 hundred tokens never justify invalidating the cached prefix.
 
+### The server is LAN-exposed, so static serving is security-relevant
+
+`app.listen` binds `0.0.0.0` on purpose — reaching it from a phone is the point.
+That means anything serving files from disk is reachable by everyone on the
+Wi-Fi, and `public/` sits one directory below `.env` (which holds the model API
+key) and `user/` (the personal corpus). A path-traversal bug in the static
+handler is not theoretical here. Keep `@fastify/static` current, and treat an
+audit finding against it as urgent rather than routine.
+
 ## Privacy
 
 `user/*.md` is the owner's personal taste corpus — listening habits, daily

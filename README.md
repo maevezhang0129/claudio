@@ -452,6 +452,10 @@ needed a schema migration to get there.
 - `mixed` inherits NetEase's dependency: if the self-hosted API is down, it
   degrades to plain iTunes rather than failing, and the startup banner says so
   instead of pretending it is still mixing.
+- The server binds `0.0.0.0` so a phone can reach it, which puts `public/` one
+  directory below `.env` and `user/` on the local network. That makes the static
+  handler security-relevant: `@fastify/static` is pinned to a version without the
+  known path-traversal advisories, and should stay that way.
 - Keep the checkout off an iCloud-synced folder. With "Desktop & Documents" sync
   on, iCloud's file provider intercepts reads under `node_modules`: the same
   small file takes anywhere from 2 ms to 7 s, and imports eventually fail with
@@ -846,6 +850,9 @@ DIDL-Lite 元数据一起带过去，这样电视屏幕上显示的是曲名和�
   浏览器本来就不允许无手势自动播放，这是如实呈现那个限制，不是绕过它。
 - `mixed` 继承了网易云那份依赖：自建服务挂掉时它会退化成纯 iTunes 而不是报错，
   启动横幅会明说退化了，不会假装还在混合。
+- 服务器绑 `0.0.0.0`，手机才连得上 —— 代价是 `public/` 的上一层就是 `.env`
+  和 `user/`，而这些在局域网上都可达。所以静态文件服务是有安全含义的：
+  `@fastify/static` 锁在没有已知路径穿越公告的版本上，别让它退回去。
 - 仓库别放在被 iCloud 同步的目录里。开着「桌面与文稿」同步时，
   iCloud 的文件提供程序会拦截 `node_modules` 下的读操作：
   同一个小文件耗时在 2ms 到 7 秒之间乱跳，最后 import 直接 `ECANCELED`。

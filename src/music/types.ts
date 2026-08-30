@@ -81,4 +81,12 @@ export interface MusicProvider {
 
   /** 自由文本搜索，用于用户直接搜歌 */
   search(term: string, limit?: number): Promise<Track[]>;
+
+  /**
+   * 依赖是否就绪。可选 —— 只有依赖外部服务的 provider 才需要实现。
+   *
+   * 上层不该知道底下接的是谁，所以它只拿到一句可以直接打印的话，
+   * 而不是「网易云服务在不在」这种具体问题的答案。
+   */
+  health?(): Promise<{ ok: boolean; detail: string }>;
 }

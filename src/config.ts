@@ -35,8 +35,12 @@ export const config = {
   /** 覆盖端点地址，用于自建代理或换区 */
   compatBaseURL: process.env.CLAUDIO_BASE_URL,
 
-  /** 音源 provider */
-  musicProvider: (process.env.CLAUDIO_MUSIC_PROVIDER ?? "itunes") as
+  /**
+   * 音源 provider。默认 mixed —— 实测每个维度都不输纯 iTunes 且一样快
+   * （见 mixed.ts 顶部）。它依赖的自建网易云服务没起时会自动退化成纯 iTunes，
+   * 所以默认值不会让任何人跑不起来。
+   */
+  musicProvider: (process.env.CLAUDIO_MUSIC_PROVIDER ?? "mixed") as
     | "itunes" | "applemusic" | "netease" | "mixed",
   itunesStorefront: process.env.CLAUDIO_ITUNES_STOREFRONT ?? "CN",
 

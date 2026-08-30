@@ -91,6 +91,9 @@ app.get("/api/health", async () => ({
   musicProvider: music.name,
   capabilities: music.capabilities,
   hasApiKey: brainReady,
+  // provider 的外部依赖在不在。mixed 在网易云挂掉时会静默退化成纯 iTunes，
+  // 不报出来的话用户会以为自己在用混合音源。
+  source: await music.health?.().catch(() => null) ?? null,
 }));
 
 /** 直接搜歌，不经过大脑 —— 图一第二层 router.js 里「简单指令走直连」那条 */
@@ -480,6 +483,10 @@ const ticker = new Ticker({
 });
 await ticker.start();
 
+// 启动时探一次外部依赖。失败不阻止启动 —— 所有 provider 都能降级，
+// 但要让人在横幅上看见自己实际拿到的是什么。
+const sourceHealth = await music.health?.().catch(() => null) ?? null;
+
 await app.listen({ port: config.port, host: "0.0.0.0" });
 const scheme = tls ? "https" : "http";
 const lan = lanUrl(scheme, config.port);
@@ -491,7 +498,9 @@ console.log(`
   安全上下文  ${tls ? "✓ https（PWA 可安装）" : "✗ http —— 跑 npm run certs 才能在手机上装 PWA"}
 
   大脑     ${brain.name} · ${brain.model}${brainReady ? "" : "   ⚠️  缺少 API key"}
-  音源     ${music.name}（storefront=${config.itunesStorefront}）
+  音源     ${music.name}（storefront=${config.itunesStorefront}）${
+    sourceHealth ? `
+           ${sourceHealth.ok ? "✓" : "⚠️ "} ${sourceHealth.detail}` : ""}
   能力     试听=${music.capabilities.preview ? "✓" : "✗"}  整曲=${music.capabilities.fullPlayback ? "✓" : "✗"}  资料库=${music.capabilities.userLibrary ? "✓" : "✗"}
   语料     user/*.md
 `);

@@ -231,6 +231,27 @@ export class NeteaseProvider implements MusicProvider {
     }
   }
 
+  /**
+   * 探一下自建服务在不在。
+   *
+   * 用 /cloudsearch 而不是某个 /status 之类的端点：要确认的不是
+   * 「进程活着」，而是「这条我们真正依赖的路径能返回结果」。
+   */
+  async health(): Promise<{ ok: boolean; detail: string }> {
+    try {
+      const songs = await this.query("test", 1);
+      if (!songs.length) {
+        return { ok: false, detail: `${this.baseUrl} 有响应但搜不到东西` };
+      }
+      return {
+        ok: true,
+        detail: this.cookie ? "已连接（带 cookie，可整曲）" : "已连接（无 cookie，只能查不能播）",
+      };
+    } catch {
+      return { ok: false, detail: `连不上 ${this.baseUrl} —— 跑 npm run netease:api` };
+    }
+  }
+
   async search(term: string, limit = 10): Promise<Track[]> {
     let songs: NeteaseSong[];
     try {

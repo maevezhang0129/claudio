@@ -478,6 +478,9 @@ body {
 .plan-head .rd { font-size: 11px; }
 .plan-tracks { font-size: 13px; color: var(--ink); line-height: 1.5; }
 
+/* 「几首来自库外」—— 电台的价值刻度，用 signal 绿标出来 */
+.lbl.fresh { color: var(--signal); margin-top: var(--pitch); }
+
 /* 外放面板 —— 藏在播放器里，点了投屏才出来 */
 .cast-panel {
   display: flex; flex-wrap: wrap;

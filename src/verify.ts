@@ -16,6 +16,7 @@ import type { BrainAdapter, BrainRequest, BrainResult } from "./brain/types.ts";
 import { config } from "./config.ts";
 import { lengthRatio, normalize, similarity } from "./music/normalize.ts";
 import type { Track } from "./music/types.ts";
+import { countFresh, familiarArtists } from "./context/library.ts";
 
 const TMP_DB = path.join(config.rootDir, "data", "_test.db");
 rmSync(TMP_DB, { force: true });
@@ -126,6 +127,13 @@ const ctx2 = await assemble({
   calendar: "20:00 排练",
   prefs: ["artist.deep：keshi（每首 32 次）"],
 });
+/** 曲库画像里的艺人，供「库外」核对用 */
+const familiar = await familiarArtists(config.rootDir);
+console.log(`曲库画像  认出 ${familiar.size} 位艺人`);
+
+/** 上一轮只给了 1 首库外时，提示词该当面点出来 */
+const ctxShort = await assemble({ rootDir: config.rootDir, lastFresh: 1 });
+
 const history = store.recentMessages("t", 20);
 console.log(`历史    ${history.length} 条：${history.map((h) => h.role).join(" → ")}`);
 console.log("记忆片注入的内容：");
@@ -239,6 +247,19 @@ const checks: [string, boolean][] = [
   // 跟语料一起放稳定组的话，改一次偏好整个缓存前缀就作废。
   ["prefs 进易变组", ctx2.volatile.includes("artist.deep")],
   ["prefs 不进稳定组（缓存前缀稳定）", !ctx2.stable.includes("artist.deep")],
+  // 「至少两首库外」写在人设里被小模型无视了，所以每轮在易变组末尾重申一次。
+  // 它必须待在最后 —— 那是注意力最高的位置，也是这条约束存在的全部理由。
+  ["硬性要求在易变组末尾", ctx2.volatile.trimEnd().endsWith("在 reason 里点明哪几首是库外的。")],
+  // 模型判断不了「这个名字在不在榜上」—— 它会一边写「Taylor Swift 是库外推荐」，
+  // 一边推一个播过 186 次的艺人。所以约束由提示词提，由代码核对。
+  ["熟悉的艺人不算库外",
+    countFresh([{ artist: "方大同" }], familiar) === 0],
+  ["陌生的艺人算库外",
+    countFresh([{ artist: "Nils Frahm" }], familiar) === 1],
+  ["合唱里只要有熟面孔就不算库外",
+    countFresh([{ artist: "李荣浩 & 方大同" }], familiar) === 0],
+  // 上一轮不达标时要当面说破 —— 实测这句比任何措辞都管用
+  ["上一轮不足时会点出来", ctxShort.volatile.includes("上一轮你只给出了 1 首")],
   ["alternate 不超过上限", keptAlt.length <= MAX_ALTERNATES],
   ["exact 全部排在 alternate 之前",
     ordered.findIndex((t) => altOnly.includes(t)) === -1 ||

@@ -53,6 +53,11 @@ export interface AssembleOptions {
    * 整个缓存前缀就作废，而它本身只有几百 token，不值这个代价。
    */
   prefs?: string[];
+  /**
+   * 上一轮实际给出了几首库外曲目（服务端核对的结果）。
+   * 不足时会在「这一轮必须满足」里当面点出来。
+   */
+  lastFresh?: number;
 }
 
 /** ① 系统提示词 */
@@ -152,6 +157,35 @@ function learned(prefs: string[]): string {
   return prefs.map((p) => `- ${p}`).join("\n");
 }
 
+/**
+ * 每轮重申一次硬性要求。
+ *
+ * 这几条人设里已经写了，但实测被无视：人设是一大段文字，
+ * 而「至少两首库外」这种可数的约束埋在中间，小模型读不出它的分量。
+ * 放在易变组末尾 —— 也就是整个 prompt 的最后 —— 命中率高得多。
+ *
+ * 短。这是每轮都要付全价的位置，写长了不值。
+ */
+function requirements(lastFresh?: number): string {
+  const lines = [
+    "- 给 4 到 6 首，不要少给。",
+    "- 其中**至少 2 首**，艺人不能出现在上面曲库画像的任何一张榜单里。" +
+      "照着他已经听了几百次的艺人推，他自己就会放，不需要电台。",
+    "- 但陌生 ≠ 编造：拿不准是否真实存在的，换一首你确信存在的陌生歌。",
+    "- 在 reason 里点明哪几首是库外的。",
+  ];
+  // 上一轮没做到就当面说破。
+  // 这条比任何措辞都管用 —— 模型自己数不清「这个名字在不在那张榜上」，
+  // 但你直接告诉它「你上次只给了 1 首」，它下一轮就会补上。
+  if (typeof lastFresh === "number" && lastFresh < 2) {
+    lines.push(
+      `- ⚠️ 上一轮你只给出了 ${lastFresh} 首真正库外的（系统核对过）。` +
+        "这一轮务必补足，别再拿他榜单上的艺人充数。",
+    );
+  }
+  return lines.join("\n");
+}
+
 /** ⑥ 执行轨迹 */
 function trace(entries: string[]): string {
   if (!entries.length) return "（本轮由用户主动发起，无调度轨迹）";
@@ -195,6 +229,10 @@ export async function assemble(opts: AssembleOptions): Promise<ContextBundle> {
     "## 本轮是怎么被触发的",
     "",
     trace(opts.trace ?? []),
+    "",
+    "## 这一轮必须满足",
+    "",
+    requirements(opts.lastFresh),
   ].join("\n");
 
   return { stable, volatile };

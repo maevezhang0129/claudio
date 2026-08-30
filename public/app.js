@@ -481,6 +481,13 @@ function addDJ(r, opts = {}) {
   if (r.trimmed > 0) notes.push(`${r.trimmed} 首只有替代版本，已略去`);
   if (notes.length) body.append(el("div", "lbl", notes.join("，") + "，已跳过"));
 
+  // 「这一轮带来了几首你库里没有的」—— 这是电台相对随机播放的全部价值，
+  // 所以它值得一个独立的、看得见的数字，而不是混在跳过提示里。
+  if (typeof r.fresh === "number" && r.tracks?.length) {
+    body.append(el("div", "lbl fresh",
+      r.fresh > 0 ? `${r.fresh} 首来自曲库之外` : "全部来自你的曲库"));
+  }
+
   turn.append(body);
   els.feed.append(turn);
 

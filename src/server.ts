@@ -13,6 +13,7 @@ import { config } from "./config.ts";
 import { assemble } from "./context/assemble.ts";
 import { currentSlot, parseRoutines } from "./context/routines.ts";
 import { currentWeather } from "./context/weather.ts";
+import { countFresh, familiarArtists } from "./context/library.ts";
 import { todayCalendar } from "./context/calendar.ts";
 import { createBrain } from "./brain/index.ts";
 import { createMusicProvider } from "./music/index.ts";
@@ -75,6 +76,14 @@ const brainReady =
  */
 const MAX_ALTERNATES = 1;
 
+/**
+ * 每个会话上一轮实际给出了几首库外曲目。
+ *
+ * 只放内存：它唯一的用途是下一轮把话说回给模型，重启后从头数一遍
+ * 不会有任何损失，不值得为它开一张表。
+ */
+const lastFreshBySession = new Map<string, number>();
+
 /** 解析后的曲目 + 匹配置信度，发给前端 */
 interface ResolvedTrack extends Track {
   confidence: "exact" | "alternate";
@@ -135,6 +144,7 @@ app.post<{ Body: { message?: string; session?: string } }>(
       prefs: store.prefsAsContext(),
       weather,
       calendar,
+      lastFresh: lastFreshBySession.get(session),
     });
 
     const history = store.recentMessages(session, 20).map((m) => ({
@@ -185,6 +195,15 @@ app.post<{ Body: { message?: string; session?: string } }>(
     const trimmed = alternates.length - keptAlternates.length;
     const tracks = [...exact, ...keptAlternates];
 
+    // 核对这一轮真的带来了几首库外的。模型自己说不准 ——
+    // 它会一边写「这是库外推荐」一边推一个播过 186 次的艺人。
+    //
+    // 必须数**真正进了队列**的那些，不能数裁剪前的候选集：
+    // 数候选集会得出「库外 6 首」而队列里只有 3 首这种自相矛盾的数字，
+    // 而且回灌给下一轮的也是个虚高的值，模型会以为自己已经做到了。
+    const fresh = countFresh(tracks, await familiarArtists(config.rootDir));
+    lastFreshBySession.set(session, fresh);
+
     const turn = {
       say: dj.say,
       reason: dj.reason,
@@ -196,6 +215,8 @@ app.post<{ Body: { message?: string; session?: string } }>(
       trimmed,
       /** 有几首存在但没有可播音源 —— 与幻觉性质不同，分开报 */
       unplayable,
+      /** 有几首的艺人不在曲库画像里 —— 电台带来的新东西 */
+      fresh,
       usage: result.usage,
       model: result.model,
     };

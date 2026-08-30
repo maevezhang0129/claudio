@@ -167,8 +167,17 @@ app.post<{ Body: { message?: string; session?: string } }>(
     const exact: ResolvedTrack[] = [];
     const alternates: ResolvedTrack[] = [];
     let dropped = 0;
+    /**
+     * 曲库里确实存在、但这套音源放不出声的。
+     *
+     * 典型是网易云认得而 iTunes 没有、且没配 cookie 的那种。
+     * 以前它们会进队列，点下去只能跳去网易云网页 ——
+     * 一个会把你踢出去的电台不是电台。宁可这一轮少一首。
+     */
+    let unplayable = 0;
     for (const r of settled) {
       if (!r) { dropped++; continue; }
+      if (!playable(r.track)) { unplayable++; continue; }
       (r.confidence === "exact" ? exact : alternates).push(toResolvedTrack(r));
     }
     const keptAlternates = alternates.slice(0, MAX_ALTERNATES);
@@ -185,6 +194,8 @@ app.post<{ Body: { message?: string; session?: string } }>(
       dropped,
       /** 有几首 alternate 因为超出上限被裁掉 */
       trimmed,
+      /** 有几首存在但没有可播音源 —— 与幻觉性质不同，分开报 */
+      unplayable,
       usage: result.usage,
       model: result.model,
     };
@@ -240,6 +251,14 @@ app.get("/api/profile", async () => {
   }
   return { played, peakHour, routines };
 });
+
+/**
+ * 这首歌有没有能塞进 <audio> 的东西。
+ * 整曲或 30 秒试听，有一个就行；两个都没有的进了队列也只能跳外部。
+ */
+function playable(t: Track): boolean {
+  return Boolean(t.previewUrl || t.fullPlayback);
+}
 
 function toResolvedTrack(r: ResolveResult): ResolvedTrack {
   return { ...r.track, confidence: r.confidence, note: r.note };

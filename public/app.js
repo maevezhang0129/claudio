@@ -477,6 +477,7 @@ function addDJ(r, opts = {}) {
 
   const notes = [];
   if (r.dropped > 0) notes.push(`${r.dropped} 首没能在曲库里找到`);
+  if (r.unplayable > 0) notes.push(`${r.unplayable} 首曲库里有但放不出声`);
   if (r.trimmed > 0) notes.push(`${r.trimmed} 首只有替代版本，已略去`);
   if (notes.length) body.append(el("div", "lbl", notes.join("，") + "，已跳过"));
 
@@ -487,6 +488,10 @@ function addDJ(r, opts = {}) {
     loadQueue(r.tracks);
     state.segue = r.segue ?? "";
     tts.speak(r.say);   // 先说话，再放歌
+    // 直接开播第一首。这一轮是你按下发送键换来的，
+    // 那次点击就是浏览器要的用户手势，所以这里 play() 不会被拦。
+    // （换档那条路没有手势，只能预置不能开播。）
+    if (r.tracks?.length) play(0);
   }
   scroll();
 

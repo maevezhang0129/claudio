@@ -147,6 +147,9 @@ async function planOneSlot(
   let dropped = 0;
   for (const r of settled) {
     if (!r) { dropped++; continue; }
+    // 与对话路径同一条规矩：放不出声的不进队列。
+    // 节目单更要守这条 —— 到点自动开播时没人守在旁边点「跳过」。
+    if (!r.track.previewUrl && !r.track.fullPlayback) { dropped++; continue; }
     (r.confidence === "exact" ? exact : alternates).push(flatten(r));
   }
 

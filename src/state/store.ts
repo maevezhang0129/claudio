@@ -221,10 +221,19 @@ export class Store {
    * 判定听完的门槛取两者之一：听满六成，或者听够 30 秒。
    * 后一条是为 30 秒试听准备的 —— 试听放到底就是听完了，
    * 但按整曲时长算永远只有 10%，会被误判成跳过。
+   *
+   * 这里**插入新行**，而不是去改那条 queued 的记录。
+   * 原先是改：`UPDATE ... WHERE provider_id = ?`。那个写法只在
+   * 「这首歌刚被对话推荐过」时成立 —— 调度器排好的节目单、
+   * 从历史里重新载入的旧队列，plays 表里都没有对应的 queued 行，
+   * UPDATE 一行都没命中，接口却照样返回 ok，收听被静默丢掉。
+   *
+   * 分成两种行之后语义也更干净：queued 是纯粹的推荐流水，
+   * played/skipped 是纯粹的收听流水，各自的时间戳都是真的。
    */
   recordListen(
     session: string,
-    providerId: string,
+    track: Pick<Track, "provider" | "providerId" | "title" | "artist">,
     listenedMs: number,
     durationMs?: number,
   ): "played" | "skipped" {
@@ -233,18 +242,22 @@ export class Store {
       (durationMs ? listenedMs >= durationMs * 0.6 : false);
     const outcome = enough ? "played" : "skipped";
 
-    // 只更新这个会话里这首歌最近的那一行 —— 同一首可能被推荐过多次，
-    // 上报的永远是刚刚听的那一次
     this.db
       .prepare(
-        `UPDATE plays SET outcome = ?, listened_ms = ?
-         WHERE id = (
-           SELECT id FROM plays
-           WHERE session = ? AND provider_id = ?
-           ORDER BY played_at DESC LIMIT 1
-         )`,
+        `INSERT INTO plays
+           (session, provider, provider_id, title, artist, played_at, outcome, listened_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(outcome, Math.round(listenedMs), session, providerId);
+      .run(
+        session,
+        track.provider,
+        track.providerId,
+        track.title,
+        track.artist,
+        Date.now(),
+        outcome,
+        Math.round(listenedMs),
+      );
     return outcome;
   }
 

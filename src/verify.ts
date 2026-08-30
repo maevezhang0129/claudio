@@ -70,7 +70,7 @@ const r1 = await brain.think({ context: ctx1, history: [], input: "随便" });
 console.log(`大脑    返回 ${r1.response.play.length} 首待解析`);
 
 const resolved1 = await Promise.all(r1.response.play.map((q) => music.resolve(q)));
-const tracks1 = [];
+const tracks1: Track[] = [];
 let dropped1 = 0;
 for (const [i, r] of resolved1.entries()) {
   const q = r1.response.play[i]!;
@@ -101,8 +101,20 @@ store.appendMessage("t", "assistant", r1.response.say);
 // 进队列 ≠ 被听。第一首上报听完，第二首上报只听了 4 秒 ——
 // 第 2 轮的记忆片应当把这两件事说成不同的事，第三首则完全不该出现。
 for (const t of tracks1) store.recordQueued("t", t);
-if (tracks1[0]) store.recordListen("t", tracks1[0].providerId, 30_000, tracks1[0].durationMs);
-if (tracks1[1]) store.recordListen("t", tracks1[1].providerId, 4_000, tracks1[1].durationMs);
+if (tracks1[0]) store.recordListen("t", tracks1[0], 30_000, tracks1[0].durationMs);
+if (tracks1[1]) store.recordListen("t", tracks1[1], 4_000, tracks1[1].durationMs);
+
+// 调度器排的节目单、从历史里重新载入的旧队列，plays 表里都没有对应的
+// queued 行。收听上报**不能**依赖那一行存在 —— 曾经它是一条
+// UPDATE ... WHERE provider_id = ?，一行都没命中，接口却照样返回 ok，
+// 整条调度器路径上的收听被静默丢掉。
+const NEVER_QUEUED = {
+  provider: "itunes" as const,
+  providerId: "verify-never-queued",
+  title: "从没进过队列的歌",
+  artist: "调度器",
+};
+store.recordListen("t", NEVER_QUEUED, 30_000, 30_000);
 
 // ---- 第 2 轮：验证记忆和历史真的回灌了 ----
 console.log("\n── 第 2 轮 ──");
@@ -207,7 +219,9 @@ const checks: [string, boolean][] = [
   ["听完的标成听完了", ctx2.volatile.includes("听完了")],
   ["跳过的如实说成跳过", ctx2.volatile.includes("秒就切走了")],
   ["只进过队列、没被听的不算播放记录",
-    store.recentPlays(50).length === Math.min(2, tracks1.length)],
+    store.recentPlays(50).every((p) => p.providerId !== tracks1[2]?.providerId)],
+  ["没被推荐过的曲目也能记下收听（调度器路径）",
+    store.recentPlays(50).some((p) => p.providerId === NEVER_QUEUED.providerId)],
   ["历史回灌为 user→assistant", history.length === 2 && history[0]!.role === "user"],
   ["稳定组含用户语料", ctx1.stable.includes("taste.md")],
   ["稳定组不含时间戳（缓存前缀稳定）", !ctx1.stable.includes("当前时间")],

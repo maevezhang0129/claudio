@@ -396,20 +396,35 @@ app.get<{ Querystring: { location?: string } }>("/api/cast/state", async (req, r
 app.post<{
   Body: {
     session?: string;
+    provider?: string;
     providerId?: string;
+    title?: string;
+    artist?: string;
     listenedMs?: number;
     durationMs?: number;
   };
 }>("/api/played", async (req, reply) => {
-  const { providerId, listenedMs } = req.body ?? {};
-  if (!providerId || typeof listenedMs !== "number" || listenedMs < 0) {
-    return reply.code(400).send({ error: "需要 providerId 和非负的 listenedMs" });
+  const b = req.body ?? {};
+  // 曲名和艺人也是必需的：这里会插入一行新的收听记录，
+  // 不再依赖「plays 表里已经有一条推荐记录」这个前提。
+  if (
+    !b.providerId || !b.title || !b.artist ||
+    typeof b.listenedMs !== "number" || b.listenedMs < 0
+  ) {
+    return reply.code(400).send({
+      error: "需要 providerId、title、artist 和非负的 listenedMs",
+    });
   }
   const outcome = store.recordListen(
-    req.body?.session ?? "default",
-    providerId,
-    listenedMs,
-    req.body?.durationMs,
+    b.session ?? "default",
+    {
+      provider: (b.provider ?? "itunes") as Track["provider"],
+      providerId: b.providerId,
+      title: b.title,
+      artist: b.artist,
+    },
+    b.listenedMs,
+    b.durationMs,
   );
   return { ok: true, outcome };
 });

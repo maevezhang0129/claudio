@@ -163,16 +163,20 @@ function tickClock() {
 // 只累计真正在播的时间：暂停、切到后台都停表，
 // 否则挂着一个暂停的播放器整晚会被记成听了八小时。
 
-let listen = { id: null, ms: 0, since: 0 };
+// 整首曲目都留着，不只留 id —— 上报时要带上曲名和艺人。
+// 服务端插入的是一条新的收听记录，它不能假设 plays 表里
+// 已经有一条对应的推荐记录：调度器排的节目单、从历史里重新载入的旧队列，
+// 都没有那一行。
+let listen = { track: null, ms: 0, since: 0 };
 
 /** 换歌。先把上一首结清，再开始给新的一首计时。 */
 function beginListen(track) {
   flushListen();
-  listen = { id: track?.providerId ?? null, ms: 0, since: 0 };
+  listen = { track: track ?? null, ms: 0, since: 0 };
 }
 
 function resumeListen() {
-  if (listen.id && !listen.since) listen.since = Date.now();
+  if (listen.track && !listen.since) listen.since = Date.now();
 }
 
 function pauseListen() {
@@ -191,14 +195,22 @@ function pauseListen() {
  */
 function flushListen(beacon) {
   pauseListen();
-  const { id, ms } = listen;
-  listen = { id: null, ms: 0, since: 0 };
-  if (!id || ms < 1000) return;   // 一秒都不到的不值得上报
+  const { track, ms } = listen;
+  listen = { track: null, ms: 0, since: 0 };
+  if (!track || ms < 1000) return;   // 一秒都不到的不值得上报
 
   const durationMs = Number.isFinite(els.audio.duration)
     ? Math.round(els.audio.duration * 1000)
     : undefined;
-  const body = JSON.stringify({ session: SESSION, providerId: id, listenedMs: ms, durationMs });
+  const body = JSON.stringify({
+    session: SESSION,
+    provider: track.provider,
+    providerId: track.providerId,
+    title: track.title,
+    artist: track.artist,
+    listenedMs: ms,
+    durationMs,
+  });
 
   // 关页面那一下 fetch 会被取消，sendBeacon 不会
   if (beacon && navigator.sendBeacon) {

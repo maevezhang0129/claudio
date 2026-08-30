@@ -24,7 +24,7 @@ code comments; they stay as they are.
 ```bash
 npm run dev:stub    # offline — no API calls, no cost; drives the UI from fixed scripts
 npm run dev         # live — needs a model API key
-npm run verify      # 23 pipeline assertions + 24 matching edge cases; costs nothing
+npm run verify      # 25 pipeline assertions + 24 matching edge cases; costs nothing
 npm run typecheck
 npm run certs       # sign a local TLS cert (needs mkcert); re-run when the LAN IP changes
 npm run netease:api # start the self-hosted NeteaseCloudMusicApi on :3000
@@ -149,14 +149,24 @@ Don't put raw control characters in source.
 
 ### `plays.outcome` separates recommending from listening
 
-A row is written as `queued` when a track enters the queue, and only becomes
-`played` or `skipped` when the client reports via `POST /api/played`. Fragment ④
-excludes `queued` rows: feeding back "you played this" about a track nobody
-opened is how the model ends up reinforcing a direction the owner never chose.
+A row is written as `queued` when a track enters the queue. A report from
+`POST /api/played` **inserts a separate** `played`/`skipped` row — it must never
+go back to updating the `queued` one, because the scheduler's lineup and
+history-recalled queues have no such row and the update silently matched nothing
+while still answering `ok`. Fragment ④ excludes `queued` rows: feeding back "you
+played this" about a track nobody opened is how the model ends up reinforcing a
+direction the owner never chose.
 
 The skip line is the only negative signal in the whole system — everything else
 (corpus, library export, derived prefs) describes things the owner likes. Do not
 collapse it back into a plain play record.
+
+### Automatic paths must not spend money
+
+`CLAUDIO_AUTOPLAN` is off by default, and the ticker only receives its `autoPlan`
+hook when the flag is on — with the flag off the scheduler code is never reached
+from a timer at all. The env var is the explicit human trigger. Keep any future
+automatic path behind the same kind of switch.
 
 ### `prefs` and the corpus do not overlap
 

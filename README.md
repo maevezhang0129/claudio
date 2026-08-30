@@ -37,7 +37,7 @@ Open https://localhost:8080. The startup banner also prints a LAN address so you
 can reach it from your phone on the same Wi-Fi.
 
 ```bash
-npm run verify      # 23 pipeline assertions + 24 matching edge cases — costs nothing
+npm run verify      # 25 pipeline assertions + 24 matching edge cases — costs nothing
 npm run typecheck
 ```
 
@@ -145,7 +145,7 @@ Pluggable via `CLAUDIO_MUSIC_PROVIDER`.
 
 | Provider | Status | Cost | Capabilities |
 |---|---|---|---|
-| **`mixed`** | ✅ **recommended** | free | NetEase recognises, iTunes plays — see the measurements below |
+| **`mixed`** | ✅ **default** | free | NetEase recognises, iTunes plays — see the measurements below |
 | `itunes` | ✅ implemented | free, no auth | search validation · artwork · 30s preview |
 | `netease` | ✅ implemented | free, self-hosted | best Mandarin catalog · full tracks **with a logged-in cookie** |
 | `applemusic` | not implemented | $99/yr Developer Program + your Apple Music subscription | full playback |
@@ -313,8 +313,13 @@ minute — deliberately dumb, and deliberately not a set of pre-armed timers:
 `routines.md` gets edited, and a laptop sleeps. Polling the wall clock survives
 both; a `setTimeout` armed six hours ago survives neither.
 
-The ticker never plans. Planning calls the model and costs money, and that has to
-be the result of someone pressing a button, not of a clock reaching a mark.
+By default the ticker never plans. Planning calls the model and costs money, and
+that cannot follow from a clock reaching a mark on its own. `CLAUDIO_AUTOPLAN=on`
+is the human saying it may: with the flag set, arriving at a slot that has no
+lineup books one. It skips slots that already have one, and skips fallback slot
+names entirely — a name that isn't in `routines.md` has no time range to plan
+for, so calling the model would buy nothing. With the flag unset the scheduler is
+not even reachable from the timer.
 
 On handoff the client loads that slot's lineup into the queue and stops there.
 It does not start playing: browsers block autoplay without a gesture anyway, and
@@ -349,6 +354,16 @@ backgrounding stop the clock, or a paused tab overnight would count as eight
 hours of listening. Duration comes from the media element rather than the track
 metadata: a 30-second preview reports four minutes in its metadata, so measuring
 against that would mark every completed preview as a skip.
+
+A report **inserts** a row rather than updating the `queued` one. The first
+version updated — `UPDATE ... WHERE provider_id = ?` — which silently assumed the
+track had just been recommended in conversation. Anything played from the
+scheduler's lineup, or from re-loading an older turn out of history, had no such
+row: the UPDATE matched nothing, the endpoint still answered `ok`, and the
+listening was dropped. That is the worst shape a bug can take, and it gutted the
+one path meant to generate volume. Two rows is also the truer model — `queued` is
+a recommendation log, `played`/`skipped` a listening log, each with its own real
+timestamp.
 
 ### Learned preferences: `prefs`
 
@@ -435,7 +450,13 @@ needed a schema migration to get there.
   gesture, and this is the honest version of that constraint rather than a
   workaround for it.
 - `mixed` inherits NetEase's dependency: if the self-hosted API is down, it
-  degrades to plain iTunes rather than failing, but you lose the recall it adds.
+  degrades to plain iTunes rather than failing, and the startup banner says so
+  instead of pretending it is still mixing.
+- Keep the checkout off an iCloud-synced folder. With "Desktop & Documents" sync
+  on, iCloud's file provider intercepts reads under `node_modules`: the same
+  small file takes anywhere from 2 ms to 7 s, and imports eventually fail with
+  `ECANCELED`. The symptom is a server that starts, prints nothing, and never
+  listens.
 - Casting was verified read-only against a real renderer (discovery, description,
   `GetTransportInfo`). `SetAVTransportURI` + `Play` follow the same SOAP path but
   were deliberately not fired — that makes a television in someone's living room
@@ -477,7 +498,7 @@ npm run certs                             # 换 WiFi、IP 变了就重跑
 打开 https://localhost:8080。启动横幅还会打印局域网地址，手机连同一 WiFi 可直接访问。
 
 ```bash
-npm run verify      # 23 项管线断言 + 24 条匹配边界用例，不花钱
+npm run verify      # 25 项管线断言 + 24 条匹配边界用例，不花钱
 npm run typecheck
 ```
 
@@ -558,7 +579,7 @@ alternate 一律降级到队列末尾，且每次回复最多保留一首。
 
 | provider | 状态 | 成本 | 能力 |
 |---|---|---|---|
-| **`mixed`** | ✅ **推荐** | 免费 | 网易云认歌、iTunes 出声 —— 实测见下 |
+| **`mixed`** | ✅ **默认** | 免费 | 网易云认歌、iTunes 出声 —— 实测见下 |
 | `itunes` | ✅ 已实现 | 免费、零鉴权 | 搜索校验 · 封面 · 30 秒试听 |
 | `netease` | ✅ 已实现 | 免费，需自建 | 华语曲库最全 · **带登录 cookie 才能整曲播放** |
 | `applemusic` | 未实现 | $99/年 Developer Program + 你的 Apple Music 订阅 | 整曲播放 |
@@ -703,8 +724,12 @@ iOS 只允许在用户手势里发起第一次 `speak()`，所以这个开关同
 笔记本会睡眠。每分钟看一眼墙上的钟，这两件事都扛得住；
 六小时前排下的 `setTimeout` 一件都扛不住。
 
-触发器永远不排期。排期要调模型、要花钱，
-那必须是人按下按钮的结果，不能是时钟走到某一格的结果。
+默认情况下触发器永远不排期。排期要调模型、要花钱，
+那不能仅仅因为时钟走到某一格就发生。`CLAUDIO_AUTOPLAN=on` 是人点的那个头：
+打开之后，换到一个还没有节目单的档就为它排一次。
+已经有节目单的档不重排，兜底时段名直接跳过 ——
+一个没写进 `routines.md` 的名字没有对应的时间段，调模型什么也换不到。
+不打开这个开关时，调度器根本不在定时器能触及的路径上。
 
 换档时前端把那一档的节目单载进队列，然后就停在那儿。
 它不会自动开始播：浏览器本来就不允许无手势自动播放，
@@ -737,6 +762,14 @@ iOS 只允许在用户手势里发起第一次 `speak()`，所以这个开关同
 时长取播放器实际媒体的时长而不是曲目元数据 ——
 30 秒试听的元数据时长是整曲的四分钟，按那个算，
 每一次完整听完的试听都会被判成跳过。
+
+上报是**插入**新行，而不是去改那条 `queued`。第一版是改的
+（`UPDATE ... WHERE provider_id = ?`），那个写法默默假设了
+「这首歌刚被对话推荐过」。从调度器节目单播的、从历史里重新载入的旧队列，
+plays 表里都没有那一行：UPDATE 一行都没命中，接口却照样返回 `ok`，
+收听被静默丢掉 —— 而那恰恰是本该产生收听量的那条路径。
+分成两种行语义也更真：`queued` 是推荐流水，`played`/`skipped` 是收听流水，
+各自的时间戳都是真的。
 
 ### 从行为学到的偏好：`prefs`
 
@@ -812,7 +845,11 @@ DIDL-Lite 元数据一起带过去，这样电视屏幕上显示的是曲名和�
 - 换档只把节目单载进队列，不会开始播 —— 电台仍然需要你按一下。
   浏览器本来就不允许无手势自动播放，这是如实呈现那个限制，不是绕过它。
 - `mixed` 继承了网易云那份依赖：自建服务挂掉时它会退化成纯 iTunes 而不是报错，
-  但网易云带来的那部分召回也就没了。
+  启动横幅会明说退化了，不会假装还在混合。
+- 仓库别放在被 iCloud 同步的目录里。开着「桌面与文稿」同步时，
+  iCloud 的文件提供程序会拦截 `node_modules` 下的读操作：
+  同一个小文件耗时在 2ms 到 7 秒之间乱跳，最后 import 直接 `ECANCELED`。
+  症状是服务起来了、什么都不打印、也永远不 listen。
 - 外放只做了只读验证（发现、描述解析、`GetTransportInfo`）。
   `SetAVTransportURI` + `Play` 走的是同一条 SOAP 路径，但故意没有真的发出去 ——
   那会让别人客厅里的电视突然开始放歌。

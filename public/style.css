@@ -481,6 +481,61 @@ body {
 /* 「几首来自库外」—— 电台的价值刻度，用 signal 绿标出来 */
 .lbl.fresh { color: var(--signal); margin-top: var(--pitch); }
 
+/* ═══ 悬浮窗 ═══
+   Document Picture-in-Picture 里的那一小块。
+   设计语言不变：最大的元素仍然是不承担交互的点阵时钟，
+   绿色仍然只表示「正在播」。窗口很小，所以只留时钟、在播曲目和走带。 */
+.mini {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pitch);
+  padding: calc(var(--pitch) * 3);
+  background: var(--void);
+  color: var(--ink);
+  text-align: center;
+}
+.mini-clock {
+  font-family: var(--dot);
+  font-weight: 700;
+  font-size: clamp(34px, 17vw, 64px);
+  line-height: 1;
+  letter-spacing: .04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.mini-slot {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+.mini-np {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin-top: var(--pitch);
+}
+.mini-np em { font-style: normal; color: var(--ash); }
+/* 走带条：整条是槽，里面那根是进度 */
+.mini-rail {
+  width: 100%;
+  height: 2px;
+  background: var(--line);
+  margin: calc(var(--pitch) * 1.5) 0;
+}
+.mini-rail i { display: block; height: 100%; width: 0; background: var(--signal); }
+.mini-tr { display: flex; gap: calc(var(--pitch) * 2); }
+
 /* 外放面板 —— 藏在播放器里，点了投屏才出来 */
 .cast-panel {
   display: flex; flex-wrap: wrap;

@@ -23,6 +23,10 @@ const els = {
   input: $("input"), send: $("send"),
   audio: $("audio"),
   cast: $("cast"), castPanel: $("cast-panel"),
+  float: $("float"), miniHost: $("mini-host"),
+  miniClock: $("mini-clock"), miniSlot: $("mini-slot"), miniNp: $("mini-np"),
+  miniRail: $("mini-rail"), miniFill: $("mini-fill"),
+  miniPrev: $("mini-prev"), miniToggle: $("mini-toggle"), miniNext: $("mini-next"),
   viewRadio: $("view-radio"), viewProfile: $("view-profile"),
   brand: $("brand"), back: $("back"), reset: $("reset"), mic: $("mic"),
   sPlayed: $("s-played"), sPeak: $("s-peak"), sRoutines: $("s-routines"),
@@ -95,6 +99,7 @@ async function syncClock() {
     const { epoch, slot, onAir, plan } = await api("/api/now");
     state.clockOffset = epoch - Date.now();
     els.slot.textContent = slot.name;
+    if (els.miniSlot) els.miniSlot.textContent = slot.name;
     // 场景名来自用户语料时才标注来源 —— 兜底时段不值得声张
     els.slotSrc.textContent =
       slot.source === "routines.md" ? `场景取自 routines.md · ${slot.range ?? ""}` : "";
@@ -149,9 +154,11 @@ const MON = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","
 function tickClock() {
   const d = new Date(Date.now() + state.clockOffset);
   const pad = (n) => String(n).padStart(2, "0");
-  els.clock.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  els.clock.textContent = hhmm;
   els.clockDate.textContent =
     `${WEEK[d.getDay()]} · ${pad(d.getDate())}-${MON[d.getMonth()]}-${d.getFullYear()}`;
+  if (els.miniClock) els.miniClock.textContent = hhmm;
 }
 
 // ─────────────────────────────── 收听上报
@@ -261,10 +268,12 @@ function cue(t) {
 }
 
 function setNowPlaying(t) {
-  els.npTitle.replaceChildren(
+  const paint = (node) => node?.replaceChildren(
     document.createTextNode(t.title),
     Object.assign(el("em"), { textContent: ` — ${t.artist}` }),
   );
+  paint(els.npTitle);
+  paint(els.miniNp);
 }
 
 function renderQueue() {
@@ -340,10 +349,17 @@ function step(delta) {
 
 function syncTransport() {
   const playing = !els.audio.paused && state.index >= 0;
+  const noPrev = state.index <= 0;
+  const noNext = state.queue.length === 0 || state.index >= state.queue.length - 1;
   els.toggle.textContent = playing ? "❚❚" : "▶";
   els.eq.classList.toggle("on", playing);
-  els.prev.disabled = state.index <= 0;
-  els.next.disabled = state.queue.length === 0 || state.index >= state.queue.length - 1;
+  els.prev.disabled = noPrev;
+  els.next.disabled = noNext;
+  if (els.miniToggle) {
+    els.miniToggle.textContent = playing ? "❚❚" : "▶";
+    els.miniPrev.disabled = noPrev;
+    els.miniNext.disabled = noNext;
+  }
 }
 
 els.toggle.onclick = () => {
@@ -353,12 +369,20 @@ els.toggle.onclick = () => {
 els.prev.onclick = () => step(-1);
 els.next.onclick = () => step(1);
 if (els.cast) els.cast.onclick = openCast;
+if (els.miniPrev) els.miniPrev.onclick = () => step(-1);
+if (els.miniNext) els.miniNext.onclick = () => step(1);
+if (els.miniToggle) els.miniToggle.onclick = () => {
+  if (state.index < 0) return play(0);
+  els.audio.paused ? els.audio.play().catch(() => {}) : els.audio.pause();
+};
 
 els.audio.addEventListener("timeupdate", () => {
   els.tNow.textContent = mmss(els.audio.currentTime);
   if (els.audio.duration) {
-    els.railFill.style.width = `${(els.audio.currentTime / els.audio.duration) * 100}%`;
+    const pct = `${(els.audio.currentTime / els.audio.duration) * 100}%`;
+    els.railFill.style.width = pct;
     els.tTotal.textContent = mmss(els.audio.duration);
+    if (els.miniFill) els.miniFill.style.width = pct;
   }
 });
 els.audio.addEventListener("play", () => { resumeListen(); syncTransport(); });
@@ -379,6 +403,70 @@ els.rail.onclick = (e) => {
   const r = els.rail.getBoundingClientRect();
   els.audio.currentTime = ((e.clientX - r.left) / r.width) * els.audio.duration;
 };
+
+// ─────────────────────────────── 悬浮窗
+//
+// 用 Document Picture-in-Picture：浏览器里唯一能把一段 DOM 放进
+// **浮在其他应用之上**的窗口的办法。不是新开一个标签页，
+// 是一个始终置顶的小窗，切到编辑器或别的应用它都还在 ——
+// 这正是「陪着你工作的电台」需要的形态，而且不用做成 Electron。
+//
+// 关键：面板是**搬过去**的，不是复制过去的。所以 els 里的引用、
+// 已经绑好的 onclick 全都继续有效，两边不会出现状态不同步。
+// <audio> 始终留在主文档 —— 一搬动播放就断了。
+
+/** PiP 窗口只有 head，样式得自己搬 */
+function copyStyles(target) {
+  for (const node of document.querySelectorAll('link[rel="stylesheet"], style')) {
+    target.head.appendChild(node.cloneNode(true));
+  }
+  // 字体是跨域的 <link>，上面那句已经带过去了；
+  // 同源的 <style> 内容也一并复制，两种情况都覆盖到。
+}
+
+async function openMini() {
+  if (!("documentPictureInPicture" in window)) {
+    setStatus("error", "这个浏览器不支持悬浮窗");
+    setTimeout(paintStatus, 2500);
+    return;
+  }
+  if (window.documentPictureInPicture.window) {
+    window.documentPictureInPicture.window.close();
+    return;
+  }
+
+  let pip;
+  try {
+    pip = await window.documentPictureInPicture.requestWindow({
+      width: 260, height: 260,
+      // 关掉时自动回到页面，省得用户找不到主界面
+      disallowReturnToOpener: false,
+    });
+  } catch {
+    return; // 用户取消，或浏览器拒绝
+  }
+
+  copyStyles(pip.document);
+  pip.document.body.style.margin = "0";
+  pip.document.body.style.background = "var(--void)";
+  // 整块搬过去
+  els.miniHost.hidden = false;
+  pip.document.body.append(els.miniHost);
+  els.float.classList.add("on");
+
+  // 关窗时搬回来。不搬回来的话下次开窗就是个空壳。
+  pip.addEventListener("pagehide", () => {
+    document.body.append(els.miniHost);
+    els.miniHost.hidden = true;
+    els.float.classList.remove("on");
+  });
+
+  // 立刻对齐一次，别让小窗先显示一秒钟的占位符
+  tickClock();
+  syncTransport();
+  const t = state.queue[state.index] ?? state.queue[0];
+  if (t) setNowPlaying(t);
+}
 
 // ─────────────────────────────── 外放（UPnP）
 //
@@ -710,6 +798,7 @@ els.reset.onclick = async () => {
   syncTransport();
   registerSW();
   initMic();
+  if (els.float) els.float.onclick = openMini;
 
   if (els.planBuild) {
     els.planBuild.onclick = async () => {

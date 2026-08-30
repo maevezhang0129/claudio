@@ -22,6 +22,8 @@
     <span class="wordmark">Claudio</span>
   </button>
   <div class="status">
+    <button class="mic" id="float" type="button"
+            aria-label="悬浮窗" title="浮到其他应用之上">FLOAT</button>
     <button class="mic" id="mic" type="button" aria-pressed="false"
             aria-label="口播开关" title="口播">MIC</button>
     <span class="led" id="led"></span>
@@ -141,6 +143,22 @@
     </p>
   </div>
 </main>
+
+<!-- 悬浮窗的内容。平时藏着，开窗时整块搬进 PiP 文档；关窗再搬回来。
+     搬移而不是克隆：这样 els 里的引用和已绑定的监听器全都继续有效。 -->
+<div id="mini-host" hidden>
+  <div class="mini substrate">
+    <div class="mini-clock" id="mini-clock">--:--</div>
+    <div class="mini-slot" id="mini-slot">&nbsp;</div>
+    <div class="mini-np" id="mini-np">还没有在播的曲目</div>
+    <div class="mini-rail" id="mini-rail"><i id="mini-fill"></i></div>
+    <div class="mini-tr">
+      <button class="tbtn" id="mini-prev" aria-label="上一首">◀◀</button>
+      <button class="tbtn on" id="mini-toggle" aria-label="播放或暂停">▶</button>
+      <button class="tbtn" id="mini-next" aria-label="下一首">▶▶</button>
+    </div>
+  </div>
+</div>
 
 <audio id="audio"></audio>
 <script type="module" src="/app.js"></script>

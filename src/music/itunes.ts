@@ -19,6 +19,26 @@ import { lengthRatio, normalize, similarity } from "./normalize.ts";
 
 const ENDPOINT = "https://itunes.apple.com/search";
 
+/**
+ * 网络抖动重试一次。
+ *
+ * 上层把 resolve() 返回的 null 一律当成「模型编的」，
+ * 所以一次瞬时失败会让一首真实存在的歌被记成幻觉、悄悄消失 ——
+ * 实测 npm run verify 里「Beyond - 海阔天空」就这么被丢过。
+ *
+ * 只重试**够不着服务**的情况（fetch 抛异常、超时）。
+ * HTTP 4xx 是服务给出的明确答复，重试没有意义。
+ */
+async function withRetry<T>(fn: () => Promise<T>, delayMs = 250): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    await new Promise((r) => setTimeout(r, delayMs));
+    return await fn();
+  }
+}
+
+
 /** 判定为「同一首歌」的阈值。0.72 是为了让繁简差异（约 0.75）能通过。 */
 const TITLE_THRESHOLD = 0.72;
 const ARTIST_THRESHOLD = 0.55;
@@ -77,6 +97,10 @@ export class ITunesProvider implements MusicProvider {
   }
 
   private async query(term: string, limit: number): Promise<ITunesResult[]> {
+    return withRetry(() => this.queryOnce(term, limit));
+  }
+
+  private async queryOnce(term: string, limit: number): Promise<ITunesResult[]> {
     const url = new URL(ENDPOINT);
     url.searchParams.set("term", term);
     url.searchParams.set("media", "music");

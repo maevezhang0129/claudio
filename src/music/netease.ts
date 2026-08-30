@@ -27,6 +27,27 @@ import type {
 import { lengthRatio, normalize, similarity } from "./normalize.ts";
 
 /** 与 iTunes 保持同一套阈值 —— 判定「同一首歌」的标准不该随音源变化 */
+
+/**
+ * 网络抖动重试一次。
+ *
+ * 上层把 resolve() 返回的 null 一律当成「模型编的」，
+ * 所以一次瞬时失败会让一首真实存在的歌被记成幻觉、悄悄消失 ——
+ * 实测 npm run verify 里「Beyond - 海阔天空」就这么被丢过。
+ *
+ * 只重试**够不着服务**的情况（fetch 抛异常、超时）。
+ * HTTP 4xx 是服务给出的明确答复，重试没有意义。
+ */
+async function withRetry<T>(fn: () => Promise<T>, delayMs = 250): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    await new Promise((r) => setTimeout(r, delayMs));
+    return await fn();
+  }
+}
+
+/** 与 iTunes 保持同一套阈值 */
 const TITLE_THRESHOLD = 0.72;
 const ARTIST_THRESHOLD = 0.55;
 
@@ -96,6 +117,10 @@ export class NeteaseProvider implements MusicProvider {
   }
 
   private async get(route: string, params: Record<string, string>): Promise<any> {
+    return withRetry(() => this.getOnce(route, params));
+  }
+
+  private async getOnce(route: string, params: Record<string, string>): Promise<any> {
     const url = new URL(this.baseUrl + route);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
     // 这套服务接受 cookie 作为普通查询参数，不需要真的走 Cookie 头

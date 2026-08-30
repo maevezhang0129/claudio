@@ -490,11 +490,21 @@ function addDJ(r, opts = {}) {
   }
   scroll();
 
-  if (r.usage) {
+  // 只有**刚发生**的这一轮才动状态灯。
+  // 重放历史时不能碰它：状态灯说的是「此刻连着谁」，
+  // 而历史里那条 model 说的是「当时连的是谁」。混为一谈的话，
+  // 会话里只要有过一条 stub 记录，页面一加载就会显示「离线」——
+  // 尽管 /api/health 明明返回着真实模型。
+  if (opts.current && r.usage) {
     state.spentUsd += r.usage.estimatedUsd ?? 0;
-    state.model = r.model ?? state.model;
-    setStatus("live", `${state.model} · $${state.spentUsd.toFixed(4)}`);
+    paintStatus();
   }
+}
+
+/** 状态灯 = 当前连接的模型 + 本次会话累计花费 */
+function paintStatus() {
+  if (!state.model) return;
+  setStatus("live", `${state.model} · $${state.spentUsd.toFixed(4)}`);
 }
 
 function addError(text, retry) {
@@ -563,7 +573,13 @@ async function restore() {
       const at = new Date(t.createdAt);
       const hhmm = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
       if (t.role === "user") addUser(t.content);
-      else if (t.payload) { addDJ(t.payload, { at: hhmm }); lastPayload = t.payload; }
+      else if (t.payload) {
+        addDJ(t.payload, { at: hhmm });
+        // 历史花费在这里一次性加总。放在 addDJ 里的话，
+        // 每刷新一次页面就会把整段历史再累加一遍，金额越刷越大。
+        state.spentUsd += t.payload.usage?.estimatedUsd ?? 0;
+        lastPayload = t.payload;
+      }
       else addDJ({ say: t.content }, { at: hhmm });
     }
     // 最后一轮的曲目装进队列，接着上次听
@@ -678,6 +694,7 @@ els.reset.onclick = async () => {
   }
 
   await restore();
+  paintStatus();   // 历史加载完，用当前连接的模型重画一次
   syncTransport();
   registerSW();
   initMic();

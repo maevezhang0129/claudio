@@ -473,6 +473,28 @@ function lanUrl(scheme: string, port: number): string | null {
 const ticker = new Ticker({
   rootDir: config.rootDir,
   store,
+  // 只有显式打开 CLAUDIO_AUTOPLAN 才接这个钩子。
+  // 不接的时候触发器碰都不会碰模型 —— 这个项目里唯一会花钱的自动路径，
+  // 必须是人打开的，不能是时钟打开的。
+  autoPlan:
+    config.autoPlan && brainReady
+      ? async (slot) => {
+          console.log(`  ${slot} 这一档还空着，自动排期中…`);
+          const plans = await buildPlan({
+            rootDir: config.rootDir,
+            brain,
+            music,
+            store,
+            day: today(),
+            onlySlot: slot,
+          });
+          console.log(
+            plans.length
+              ? `  ${slot} 排好了：${plans[0]!.tracks.length} 首`
+              : `  ${slot} 排期没产出（routines.md 里找不到这个时段？）`,
+          );
+        }
+      : undefined,
   onChange: (next, prev) => {
     const when = new Date(next.since).toLocaleTimeString("zh-CN", { hour12: false });
     console.log(

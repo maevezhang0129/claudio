@@ -38,6 +38,14 @@ export interface TickerOptions {
   store: Store;
   /** 换档时回调，用于打日志 */
   onChange?: (next: OnAir, prev: OnAir | null) => void;
+  /**
+   * 换到一个还没排期的档时，自动为它排一次。
+   *
+   * 这个钩子**会花钱**（一次模型调用），所以默认不接 ——
+   * 由 server.ts 根据 CLAUDIO_AUTOPLAN 决定要不要传进来。
+   * 触发器本身不知道排期要花钱，它只知道「这一档空着」。
+   */
+  autoPlan?: (slot: string) => Promise<void>;
 }
 
 export class Ticker {
@@ -92,6 +100,28 @@ export class Ticker {
       hasPlan: this.planExists(slot.name),
     };
     this.opts.onChange?.(this.current, prev);
+
+    // 这一档空着就补排一次。只对 routines.md 里写明的时段做 ——
+    // 兜底时段名（「夜晚」这种）在 routines.md 里找不到对应的时间段，
+    // 排期会返回空，白白付一次调用。
+    if (
+      this.opts.autoPlan &&
+      !this.current.hasPlan &&
+      slot.source === "routines.md"
+    ) {
+      const target = slot.name;
+      void this.opts
+        .autoPlan(target)
+        .then(() => {
+          // 排完了要把 hasPlan 更新掉，否则要等下一分钟前端才看得见
+          if (this.current?.slot === target) {
+            this.current.hasPlan = this.planExists(target);
+          }
+        })
+        .catch(() => {
+          // 排期失败不该影响换档本身 —— 这一档照样是当前档，只是没节目单
+        });
+    }
   }
 
   private planExists(slot: string): boolean {

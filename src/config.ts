@@ -61,5 +61,14 @@ export const config = {
    */
   calendarEnabled: process.env.CLAUDIO_CALENDAR === "on",
 
+  /**
+   * 到点自动为空着的那一档排期。默认关。
+   *
+   * 排期是这个项目里唯一会花钱的自动路径，所以它必须由人显式打开一次，
+   * 而不是「打开页面就跑」。开了之后每换到一个还没排期的档
+   * 会调一次模型（glm-4.5-air 约 $0.00055），一天最多等于 routines.md 里的档数。
+   */
+  autoPlan: process.env.CLAUDIO_AUTOPLAN === "on",
+
   dbPath: path.join(ROOT_DIR, "data", "state.db"),
 } as const;

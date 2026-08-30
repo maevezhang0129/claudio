@@ -456,14 +456,40 @@ app.delete<{ Params: { key: string } }>("/api/prefs/:key", async (req) => {
   return { ok: true };
 });
 
+/**
+ * 挑一个手机真正连得上的局域网地址。
+ *
+ * 不能简单地取「第一个非内部 IPv4」—— 开了 TUN 模式代理的机器上，
+ * 那个地址很可能是 utun 上的 198.18.0.1（Clash / Surge 的 fake-IP 段），
+ * 手机连过去什么也没有，而且 npm run certs 还会去给它签证书。
+ *
+ * 所以按可达性排序：真实私有网段优先，其余的排后面兜底。
+ */
+const PRIVATE_RANGES = [
+  /^192\.168\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+];
+
+/** 明确排除：TUN 假地址段和链路本地地址，手机都到不了 */
+const UNREACHABLE = [
+  /^198\.1[89]\./,   // 198.18.0.0/15 —— 基准测试段，TUN 类代理拿它做 fake-IP
+  /^169\.254\./,     // 链路本地
+];
+
 /** 局域网地址 —— 手机连同一 WiFi 时用这个访问，省得每次手动查 IP */
 function lanUrl(scheme: string, port: number): string | null {
+  const found: string[] = [];
   for (const list of Object.values(networkInterfaces())) {
     for (const net of list ?? []) {
-      if (net.family === "IPv4" && !net.internal) return `${scheme}://${net.address}:${port}`;
+      if (net.family !== "IPv4" || net.internal) continue;
+      if (UNREACHABLE.some((re) => re.test(net.address))) continue;
+      found.push(net.address);
     }
   }
-  return null;
+  const best =
+    found.find((a) => PRIVATE_RANGES.some((re) => re.test(a))) ?? found[0];
+  return best ? `${scheme}://${best}:${port}` : null;
 }
 
 /**

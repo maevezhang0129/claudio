@@ -25,12 +25,25 @@ const CERT_DIR = path.join(ROOT, "certs");
 export const CERT_FILE = path.join(CERT_DIR, "local-cert.pem");
 export const KEY_FILE = path.join(CERT_DIR, "local-key.pem");
 
-/** 本机所有对外的 IPv4 —— 有线和无线可能同时在，全都签进去 */
+/**
+ * 本机所有**手机真正连得上**的 IPv4。有线和无线可能同时在，都签进去。
+ *
+ * 但要排掉 TUN 类代理造出来的假地址（198.18.0.0/15 是 Clash / Surge
+ * 的 fake-IP 段）和链路本地地址 —— 给它们签证书没有任何意义，
+ * 只会让证书里多几个永远用不上的名字。
+ */
+const UNREACHABLE = [
+  /^198\.1[89]\./,
+  /^169\.254\./,
+];
+
 function lanAddresses() {
   const out = [];
   for (const list of Object.values(networkInterfaces())) {
     for (const net of list ?? []) {
-      if (net.family === "IPv4" && !net.internal) out.push(net.address);
+      if (net.family !== "IPv4" || net.internal) continue;
+      if (UNREACHABLE.some((re) => re.test(net.address))) continue;
+      out.push(net.address);
     }
   }
   return out;

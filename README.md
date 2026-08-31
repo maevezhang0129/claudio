@@ -326,6 +326,55 @@ It does not start playing: browsers block autoplay without a gesture anyway, and
 interrupting whatever you are listening to because the clock moved is rude. If
 something is already playing, it only leaves a line in the feed.
 
+### The queue only holds things it can actually play
+
+A track the catalogue knows but this source cannot sound — NetEase has it, iTunes
+does not, and no cookie is set — used to enter the queue anyway and turn into a
+link out to a web page. A radio station that ejects you is not a radio station.
+Those are now counted as `unplayable` and left out, separately from `dropped`,
+which counts fabrications. One fewer song beats one dead row.
+
+A new recommendation also starts playing on its own. The send click is the user
+gesture browsers require, so `play(0)` is allowed there. A slot handoff has no
+gesture and only cues.
+
+### Out-of-library picks are demanded in the prompt and counted in code
+
+Asked for nothing, the DJ recommends the artists already at the top of
+`library.md` — the safest picks and the least useful ones, because those are the
+songs you would have played yourself.
+
+Stating the rule in the persona did nothing: it is a long document and a countable
+constraint buried inside it does not register with a small model. Restated as the
+last section of the volatile group — the end of the prompt — it moved a turn from
+3 library-only tracks to 6 with genuinely new names among them.
+
+The model cannot check itself, though. It will write "Taylor Swift is an
+out-of-library pick" about an artist with 186 plays, because deciding whether a
+name appears on a chart thousands of tokens earlier is exactly what it is bad at.
+So `countFresh()` parses the artists out of `library.md` and counts, and the
+result is fed back the next turn: "you gave 0 genuinely new ones last time."
+
+Measured on a fresh session, same prompt: 3 of 4 out-of-library, then 5 of 5.
+
+**It does not hold on a session with a long transcript.** The same prompt against
+a session carrying a dozen library-heavy turns returns 0 new artists, and
+shortening the history window to 8 messages did not change that — the model is
+imitating its own past replies more strongly than it is following the constraint.
+Clearing the session restores the behaviour. This is a limit of `glm-4.5-air`,
+not of the plumbing.
+
+### A floating window, for working alongside
+
+`FLOAT` opens the station in a Document Picture-in-Picture window: a small
+always-on-top panel that stays visible over an editor or a browser. It carries the
+signature element — the dot-matrix clock — plus what is playing and the transport.
+
+The panel is **moved** into that window rather than copied, so every element
+reference and bound handler keeps working and the two views cannot drift apart.
+The `<audio>` element stays behind in the main document; moving it would cut
+playback. Chrome only; elsewhere the button says so.
+
 ### The `plays` table was recording recommendations
 
 A row was written the moment a track entered the queue, and the client never
@@ -403,54 +452,6 @@ It lands in the **volatile** group, not with the corpus. It gets re-derived and
 hand-edited, and a few hundred tokens are not worth invalidating a 5,000-character
 cached prefix over. `GET /api/prefs` and `PUT /api/prefs/:key` make it editable
 without SQL; two assertions keep it out of the stable group.
-
-### The station has to bring you something new
-
-An early version recommended almost entirely from the library. That is the safe
-answer and the useless one: those are the songs you already play yourself.
-
-The rule lives in the persona, but stating it there did nothing — the persona is
-a long document and "at least two unfamiliar artists" is a countable constraint
-buried in prose. Restating it as the **last** section of the volatile group, at
-the very end of the prompt, moved a turn from 3 library-only tracks to 6 with
-genuinely new names in them.
-
-Asking is still not enough, because **the model cannot tell what is familiar**.
-It will write "Taylor Swift is an out-of-library pick" about an artist with 186
-plays. That is not dishonesty: checking a name against a chart it read thousands
-of tokens ago is exactly what a small model is bad at.
-
-So the constraint is stated by the prompt and *verified by code*.
-`src/context/library.ts` parses the artist names out of `library.md`, the server
-counts how many queued tracks are by someone not on those charts, and the count
-is fed back into the next turn's requirements — "you only gave 1 last time" does
-more than any wording. It costs no extra call.
-
-The count is taken on the **final queue**, not the resolved candidates. Counting
-candidates produced "6 out-of-library" beside a 3-track queue, and fed an
-inflated number back to a model that then believed it had already complied.
-
-### Every queued track plays inside Claudio
-
-A track that resolves but has no audio — NetEase knows it, iTunes does not, and
-no cookie is set — used to enter the queue and open the NetEase website when
-clicked. A station that throws you out to another app is not a station. Those are
-now dropped and counted separately from hallucinations, because they are a
-different failure: the song is real, it just cannot be heard here.
-
-The bar is a playable source of any kind. Without a NetEase cookie that is a
-30-second preview for nearly everything; full-length audio still needs the cookie.
-
-### Floating radio
-
-`FLOAT` opens the clock, the current track and the transport in a Document
-Picture-in-Picture window — the one way a web page can put DOM in a window that
-stays above other applications. It is the shape this project always implied and
-it needs no Electron shell.
-
-The panel is **moved** into that window rather than cloned, so every existing
-element reference and event handler keeps working and the two views cannot drift
-apart. `<audio>` stays in the main document: moving it stops playback.
 
 ### Cast: play it out loud
 
@@ -788,6 +789,48 @@ iOS 只允许在用户手势里发起第一次 `speak()`，所以这个开关同
 而且因为时钟动了就打断你正在听的东西很粗暴。
 已经在播的时候，它只在对话流里留一行。
 
+### 队列里只放放得出声的东西
+
+曲库认得、但这套音源发不出声的曲目 —— 网易云有、iTunes 没有、又没配 cookie ——
+过去照样进队列，点下去变成跳转到一个网页。**一个会把你踢出去的电台不是电台。**
+这类现在计入 `unplayable` 并被排除，与统计幻觉的 `dropped` 分开。
+少一首，好过队列里躺着一行点不动的东西。
+
+新推荐也会自动播第一首。发送键那一下就是浏览器要的用户手势，
+所以那里的 `play(0)` 不会被拦。换档没有手势，只能预置。
+
+### 库外曲目：提示词提要求，代码来核对
+
+什么都不说的话，DJ 会推 `library.md` 榜首那几位 ——
+最安全也最没用，因为那些歌你自己就会放。
+
+把规则写进人设**没有任何效果**：人设是一大段文字，
+可数的约束埋在中间，小模型读不出它的分量。
+改成放在易变组的最后一节（也就是整个 prompt 的末尾），
+同一轮就从「3 首全是库内」变成「6 首里有真正的新名字」。
+
+但模型核对不了自己。它会一边写「Taylor Swift 是库外推荐」，
+一边推一个你播过 186 次的艺人 —— 判断「这个名字在不在几千 token 之前那张榜上」
+恰恰是它最不擅长的事。所以 `countFresh()` 从 `library.md` 里解析出艺人名来数，
+数完的结果回灌给下一轮：「上一轮你只给出了 0 首真正库外的」。
+
+全新会话实测，同一条 prompt：4 首里 3 首库外，下一轮 5 首全是库外。
+
+**但它在历史很长的会话里不成立。** 同样的 prompt，在一个攒了十几轮
+库内推荐的会话里返回 0 首新艺人；把历史窗口缩到 8 条也没改变结果 ——
+模型模仿自己过往回复的力度，压过了那条约束。清空会话就恢复正常。
+这是 `glm-4.5-air` 的能力边界，不是管线的问题。
+
+### 一个陪着你工作的悬浮窗
+
+`FLOAT` 用 Document Picture-in-Picture 把电台开成一个小窗：
+**始终置顶**，压在编辑器或浏览器之上。里面留着签名元素 ——
+点阵时钟 —— 加上在播曲目和走带。
+
+面板是**搬**进那个窗口的，不是复制：所以所有元素引用和已绑定的处理器继续有效，
+两边不可能各说各话。`<audio>` 留在主文档 —— 搬动它播放就断了。
+仅 Chrome 支持，其他浏览器点了会明说。
+
 ### `plays` 表一直记的是推荐，不是收听
 
 曲目进队列的那一刻就写一行，而前端从来不上报任何东西。
@@ -859,51 +902,6 @@ plays 表里都没有那一行：UPDATE 一行都没命中，接口却照样返�
 几百 token 不值得让一段 5000 字符的缓存前缀作废。
 `GET /api/prefs` 和 `PUT /api/prefs/:key` 让它不用写 SQL 就能改；
 两条断言守着它不进稳定组。
-
-### 电台必须带来你没有的东西
-
-早先的版本几乎只从曲库里推。那是最安全的答案，也是最没用的 ——
-那些歌你自己就会放。
-
-这条规则本来写在人设里，但写了等于没写：人设是一大段文字，
-而「至少两首陌生艺人」是个可数的约束，埋在散文中间没有分量。
-把它**重申在易变组的最后一节**（也就是整个 prompt 的末尾）之后，
-同一句话从「3 首全是库里的」变成了「6 首，里面有真正的新名字」。
-
-但光靠说还不够，因为**模型判断不了什么叫熟悉**。它会一边写着
-「Taylor Swift 是库外推荐」，一边推着一个你播过 186 次的艺人。
-这不是撒谎 —— 把一个名字和几千 token 之前读过的榜单逐条比对，
-恰恰是小模型做不好的事。
-
-所以：**约束由提示词提出，由代码核对。**
-`src/context/library.ts` 从 `library.md` 里解析出艺人名，
-服务端数清楚队列里有几首的艺人不在那些榜上，
-再把这个数回灌进下一轮的要求 ——「你上一轮只给了 1 首」
-比任何措辞都管用，而且不额外花一次调用。
-
-这个数必须在**最终队列**上数，不能在解析出的候选集上数。
-数候选集会得到「库外 6 首」配一个 3 首的队列，
-还会把一个虚高的数字回灌给模型，让它以为自己已经做到了。
-
-### 队列里的每一首都在 Claudio 里播
-
-一首解析成功但没有音源的歌 —— 网易云认得、iTunes 没有、又没配 cookie ——
-以前会进队列，点下去跳去网易云网页。**一个会把你踢出去的电台不是电台。**
-它们现在被丢弃，并且和幻觉分开计数，因为性质不同：
-歌是真的，只是在这里听不到。
-
-门槛是「有任何一种可播音源」。没有网易云 cookie 时，
-这对绝大多数歌意味着 30 秒试听；整曲仍然需要那个 cookie。
-
-### 悬浮电台
-
-`FLOAT` 把时钟、当前曲目和走带放进一个 Document Picture-in-Picture 窗口 ——
-那是网页唯一能把 DOM 放进**始终浮在其他应用之上**的窗口的办法。
-这是这个项目一直隐含的形态，而且不需要套一层 Electron。
-
-面板是**搬**进那个窗口的，不是复制过去的：这样所有已有的元素引用和
-事件监听都继续有效，两边不可能各说各话。`<audio>` 留在主文档 ——
-一搬动播放就断了。
 
 ### 外放：让它在屋里响
 

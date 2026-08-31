@@ -12,9 +12,14 @@
  *
  * cookie 是凭据，所以它只会被写进 .env（已 gitignore），
  * 终端上只打印掩码，不打印原文。
+ *
+ * 二维码图片是**一次性**的：只在本进程轮询期间有意义。所以启动时先清掉
+ * 旧的，退出时删掉自己这张。留在磁盘上的二维码看起来永远有效，
+ * 扫了却没有任何进程在等 —— 手机上会正常登录，这边什么也不会发生，
+ * 而这恰恰是最难自己看出来的一种失败。
  */
 
-import { writeFile, readFile } from "node:fs/promises";
+import { writeFile, readFile, unlink, readdir } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -24,6 +29,19 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENV = path.join(ROOT, ".env");
 const BASE = process.env.CLAUDIO_NETEASE_BASE_URL ?? "http://localhost:3000";
 const KEY = "CLAUDIO_NETEASE_COOKIE";
+
+const QR_PREFIX = "claudio-netease-qr-";
+
+/** 清掉上一次留下的二维码 —— 它们已经失效，留着只会被误扫 */
+async function sweepOldQr() {
+  try {
+    for (const f of await readdir(tmpdir())) {
+      if (f.startsWith(QR_PREFIX)) await unlink(path.join(tmpdir(), f)).catch(() => {});
+    }
+  } catch {
+    // 清不掉不影响主流程
+  }
+}
 
 /** 轮询间隔。网易云那边的二维码有效期约 3 分钟 */
 const POLL_MS = 2000;
@@ -83,6 +101,7 @@ async function main() {
     process.exit(1);
   }
 
+  await sweepOldQr();
   const { data: { unikey } } = await api("/login/qr/key");
   const { data: { qrimg, qrurl } } = await api("/login/qr/create", {
     key: unikey,
@@ -91,17 +110,25 @@ async function main() {
 
   // qrimg 是 data:image/png;base64,... —— 落成文件再交给系统打开，
   // 比在终端里画 ASCII 二维码可靠（也不用为此引一个依赖）
-  const png = path.join(tmpdir(), `claudio-netease-qr-${Date.now()}.png`);
+  const png = path.join(tmpdir(), `${QR_PREFIX}${Date.now()}.png`);
   await writeFile(png, Buffer.from(qrimg.split(",")[1], "base64"));
   if (process.platform === "darwin") execFile("open", [png], () => {});
 
+  // 无论怎么退出都把图删掉，别给下一次留一张会被误扫的废码
+  const cleanup = () => { void unlink(png).catch(() => {}); };
+  process.on("exit", cleanup);
+  process.on("SIGINT", () => { cleanup(); process.exit(130); });
+
   console.log(`
-  二维码已生成：${png}${process.platform === "darwin" ? "（已自动打开）" : "（手动打开这个文件）"}
+  二维码已生成并打开：${png}
+
+  ⚠️ 这张码只在**这个窗口还开着**的时候有效。
+     关掉这个进程它就作废了 —— 那时候再扫，手机上照样会显示登录成功，
+     但这边没有任何东西在等，.env 不会有任何变化。
 
   用**网易云音乐 App** 扫它 —— 不是微信，不是相机。
-  App 里：我的 → 右上角扫一扫。
+  App 里：我的 → 右上角扫一扫 → 扫完在手机上点确认。
 
-  扫完在手机上点确认，这边会自动继续。
   链接（备用）：${qrurl}
 `);
 
@@ -120,7 +147,12 @@ async function main() {
       last = res.code;
       // 800 过期 / 801 等待扫码 / 802 已扫待确认 / 803 成功
       if (res.code === 801) console.log("  等待扫码…");
-      if (res.code === 802) console.log("  已扫到，请在手机上点确认…");
+      else if (res.code === 802) console.log("  已扫到，请在手机上点确认…");
+      else if (res.code !== 800 && res.code !== 803) {
+        // 没见过的返回码原样打出来。闷头继续轮询的话，
+        // 用户只会看到「一直在等」，却不知道服务端已经在说别的了。
+        console.log(`  服务端返回 code=${res.code} ${res.message ?? ""}`);
+      }
     }
 
     if (res.code === 800) {

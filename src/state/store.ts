@@ -296,6 +296,25 @@ export class Store {
   }
 
   /**
+   * 刚推荐过、但还不知道有没有被听的曲目。
+   *
+   * 第④片刻意排除了 queued —— 把「推过」说成「听过」是撒谎。
+   * 但完全不告诉模型它刚推过什么，它就会连着两轮推同一批歌
+   * （实测第二轮重复了第一轮的两首）。所以单独给一片，
+   * 措辞上与「听过」严格分开：这是「别重复」，不是「他喜欢」。
+   */
+  recentQueuedAsContext(session: string, limit = 10): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT title, artist FROM plays
+         WHERE session = ? AND outcome = 'queued'
+         ORDER BY played_at DESC LIMIT ?`,
+      )
+      .all(session, limit) as Array<{ title: string; artist: string }>;
+    return rows.map((r) => `${r.artist} - ${r.title}`);
+  }
+
+  /**
    * 渲染成喂给 ④「已检索记忆」那一片的文本。
    *
    * 跳过的必须显式说出来，而且比听完的更有信息量 ——

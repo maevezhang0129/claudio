@@ -142,6 +142,7 @@ app.post<{ Body: { message?: string; session?: string } }>(
       rootDir: config.rootDir,
       recentPlays: store.recentPlaysAsContext(15),
       prefs: store.prefsAsContext(),
+      justQueued: store.recentQueuedAsContext(session, 10),
       weather,
       calendar,
       lastFresh: lastFreshBySession.get(session),

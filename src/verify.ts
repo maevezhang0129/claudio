@@ -126,6 +126,7 @@ const ctx2 = await assemble({
   weather: "雷阵雨，24°C",
   calendar: "20:00 排练",
   prefs: ["artist.deep：keshi（每首 32 次）"],
+  justQueued: ["某人 - 刚推过的歌"],
 });
 /** 曲库画像里的艺人，供「库外」核对用 */
 const familiar = await familiarArtists(config.rootDir);
@@ -249,6 +250,11 @@ const checks: [string, boolean][] = [
   ["prefs 不进稳定组（缓存前缀稳定）", !ctx2.stable.includes("artist.deep")],
   // 「至少两首库外」写在人设里被小模型无视了，所以每轮在易变组末尾重申一次。
   // 它必须待在最后 —— 那是注意力最高的位置，也是这条约束存在的全部理由。
+  // 「刚推过」和「听过」必须分开表述：把前者说成后者，
+  // 等于告诉模型「他喜欢这个」，而实际上他可能连点都没点。
+  ["刚推过的进易变组", ctx2.volatile.includes("刚推过的歌")],
+  ["刚推过与听过分属不同段落",
+    ctx2.volatile.indexOf("刚推荐过，别再推一遍") > ctx2.volatile.indexOf("最近播过什么")],
   ["硬性要求在易变组末尾", ctx2.volatile.trimEnd().endsWith("在 reason 里点明哪几首是库外的。")],
   // 模型判断不了「这个名字在不在榜上」—— 它会一边写「Taylor Swift 是库外推荐」，
   // 一边推一个播过 186 次的艺人。所以约束由提示词提，由代码核对。

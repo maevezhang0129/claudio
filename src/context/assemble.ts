@@ -53,6 +53,8 @@ export interface AssembleOptions {
    * 整个缓存前缀就作废，而它本身只有几百 token，不值这个代价。
    */
   prefs?: string[];
+  /** 刚推荐过但还不知道听没听的曲目 —— 只用来避免重复，不代表喜好 */
+  justQueued?: string[];
   /**
    * 上一轮实际给出了几首库外曲目（服务端核对的结果）。
    * 不足时会在「这一轮必须满足」里当面点出来。
@@ -186,6 +188,19 @@ function requirements(lastFresh?: number): string {
   return lines.join("\n");
 }
 
+/**
+ * 刚推过什么。
+ *
+ * 与上面「最近播过什么」是两回事，措辞上必须分开 ——
+ * 那一片说的是他**听了**什么（含正负反馈），
+ * 这一片只说「这些刚端上去过，换点别的」。
+ * 混在一起会让模型把「推过但没听」误当成喜好。
+ */
+function justQueued(items: string[]): string {
+  if (!items.length) return "（没有）";
+  return items.map((p) => `- ${p}`).join("\n");
+}
+
 /** ⑥ 执行轨迹 */
 function trace(entries: string[]): string {
   if (!entries.length) return "（本轮由用户主动发起，无调度轨迹）";
@@ -225,6 +240,10 @@ export async function assemble(opts: AssembleOptions): Promise<ContextBundle> {
     "## 从行为里学到的",
     "",
     learned(opts.prefs ?? []),
+    "",
+    "## 刚推荐过，别再推一遍",
+    "",
+    justQueued(opts.justQueued ?? []),
     "",
     "## 本轮是怎么被触发的",
     "",

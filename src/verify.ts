@@ -216,6 +216,27 @@ for (const [a, b, want] of altCases) {
   console.log(`  ${ok ? "PASS" : "FAIL"}  比值 ${ratio.toFixed(3)} ${got ? "通过" : "拒绝"}  ${a} <-> ${b}`);
 }
 
+// ---- 库外判定 ----
+// 这条约束由提示词提出、由代码核对。模型说不清「这个名字在不在榜上」——
+// 实测它会一边写「Taylor Swift 是库外推荐」一边推一个播过 186 次的艺人。
+console.log("\n── 库外判定 ──");
+const freshCases: Array<[string, boolean]> = [
+  ["方大同", false],
+  ["Taylor Swift", false],
+  ["keshi", false],
+  ["李荣浩 & 方大同", false],   // 合唱里有熟面孔就不算新
+  ["Meghan Trainor", true],
+  ["Nils Frahm", true],
+];
+let freshFailed = 0;
+for (const [artist, wantFresh] of freshCases) {
+  const got = countFresh([{ artist }], familiar) === 1;
+  const ok = got === wantFresh;
+  if (!ok) freshFailed++;
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${got ? "库外" : "熟悉"}  ${artist}`);
+}
+console.log(`  （从 library.md 认出 ${familiar.size} 位艺人）`);
+
 // ---- 断言 ----
 console.log("\n── 断言 ──");
 const checks: [string, boolean][] = [
@@ -299,6 +320,6 @@ rmSync(TMP_DB, { force: true });
 rmSync(TMP_DB + "-wal", { force: true });
 rmSync(TMP_DB + "-shm", { force: true });
 
-failed += altFailed + normFailed;
+failed += altFailed + normFailed + freshFailed;
 console.log(failed === 0 ? "\n全部通过" : `\n${failed} 项失败`);
 process.exit(failed === 0 ? 0 : 1);

@@ -563,6 +563,14 @@ function addDJ(r, opts = {}) {
   if (r.reason) body.append(el("div", "reason", r.reason));
   if (r.segue) body.append(el("div", "segue", r.segue));
 
+  // 库外曲目是这一轮的正面结果，不是「跳过了什么」，所以单独一行。
+  // 数字由服务端核对得出，不采信模型自己的说法 ——
+  // 它会一边写「这是库外推荐」一边推一个你播过 186 次的艺人。
+  if (r.tracks?.length && typeof r.fresh === "number") {
+    body.append(el("div", r.fresh >= 2 ? "lbl fresh" : "lbl",
+      r.fresh > 0 ? `其中 ${r.fresh} 首来自曲库之外` : "这一轮全部来自你的曲库"));
+  }
+
   const notes = [];
   if (r.dropped > 0) notes.push(`${r.dropped} 首没能在曲库里找到`);
   if (r.unplayable > 0) notes.push(`${r.unplayable} 首曲库里有但放不出声`);

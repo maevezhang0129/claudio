@@ -481,6 +481,10 @@ body {
 /* 「几首来自库外」—— 电台的价值刻度，用 signal 绿标出来 */
 .lbl.fresh { color: var(--signal); margin-top: var(--pitch); }
 
+/* 达标的库外数量用 signal 绿 —— 与「正在播」同一个含义域：
+   这是电台此刻真正在做的事，不是一条统计脚注 */
+.lbl.fresh { color: var(--signal); }
+
 /* ═══ 悬浮窗 ═══
    Document Picture-in-Picture 里的那一小块。
    设计语言不变：最大的元素仍然是不承担交互的点阵时钟，

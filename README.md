@@ -189,14 +189,19 @@ improvement strictly additive.
 
 ```bash
 npm run netease:api     # starts a self-hosted NeteaseCloudMusicApi on :3000
-npm run netease:login   # scan the QR with the NetEase app; writes the cookie to .env
+npm run netease:login   # SMS code or QR; writes the cookie into .env
 ```
 
 `netease:login` exists because the alternative is "open DevTools, find Cookies,
 copy a 300-character string" — three steps that each invite a mistake, on a Mac
-where F12 is the volume key. The self-hosted API already speaks the QR login
-flow, so the script drives it and merges the result into `.env`, leaving every
-other line alone.
+where F12 is the volume key. The script drives the self-hosted API's own login
+flow and merges the result into `.env`, leaving every other line alone.
+
+It defaults to an SMS code rather than the QR. The QR encodes a URL, so scanning
+it with a camera or a browser opens a web login page — which signs the phone in
+and completes nothing here, leaving the terminal waiting forever while every
+signal on the phone says it worked. Only the NetEase Music app's own scanner
+finishes that handshake. The SMS path needs no app at all.
 
 Search and metadata work fine anonymously, and the Mandarin catalog really is
 better — `陈奕迅 富士山下` comes back first, where iTunes needs the similarity
@@ -677,13 +682,19 @@ iTunes 根本没听说过这个东西，于是这首歌从「能播」变成了�
 
 ```bash
 npm run netease:api     # 起一个自建的 NeteaseCloudMusicApi，监听 :3000
-npm run netease:login   # 用网易云 App 扫码，cookie 自动写进 .env
+npm run netease:login   # 手机验证码或扫码，cookie 自动写进 .env
 ```
 
 之所以有 `netease:login`：另一条路是「打开开发者工具 → 找 Cookies →
 复制一串 300 字符」，三步每一步都能出错，而 Mac 上连打开开发者工具
-都得先知道 F12 是音量键。自建的那个服务本身就支持扫码登录，
-脚本只是把它驱动起来，然后把结果合并进 `.env` —— 其余每一行都不动。
+都得先知道 F12 是音量键。脚本把自建服务本身的登录流程驱动起来，
+然后把结果合并进 `.env` —— 其余每一行都不动。
+
+默认走**手机验证码**而不是扫码。二维码里是一个网址，
+用相机或浏览器扫会打开网页登录页 —— 那会让手机登录成功，
+但这边的握手一步都没完成，终端会一直等下去，
+而手机上每一个信号都在说「成功了」。只有网易云音乐 App 自己的扫一扫
+能完成那个握手。验证码那条路根本不需要 App。
 
 匿名状态下搜索和元数据都正常，华语曲库确实更全 —— 搜「陈奕迅 富士山下」
 第一条就是原版，iTunes 那边要靠相似度兜。（这里早先引过「87% 对 77%」，

@@ -26,6 +26,7 @@ import type { Device } from "./cast/upnp.ts";
 import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 /**
  * 有证书就走 https。
@@ -518,6 +519,23 @@ const UNREACHABLE = [
   /^169\.254\./,     // 链路本地
 ];
 
+/**
+ * 谁占着这个端口。查不出来就返回 null —— 这只是给错误信息添一句有用的话，
+ * 查不到不该让「端口被占」这件事本身报得更难看。
+ */
+function occupant(port: number): string | null {
+  try {
+    const out = execFileSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const pids = out.split("\n").filter(Boolean);
+    return pids.length ? `\n  占着它的进程：PID ${pids.join(", ")}\n` : null;
+  } catch {
+    return null;   // 没有 lsof，或者没权限看
+  }
+}
+
 /** 局域网地址 —— 手机连同一 WiFi 时用这个访问，省得每次手动查 IP */
 function lanUrl(scheme: string, port: number): string | null {
   const found: string[] = [];
@@ -576,7 +594,28 @@ await ticker.start();
 // 但要让人在横幅上看见自己实际拿到的是什么。
 const sourceHealth = await music.health?.().catch(() => null) ?? null;
 
-await app.listen({ port: config.port, host: "0.0.0.0" });
+/**
+ * 端口被占是这个项目最常见的启动失败 —— 它会被反复启停，
+ * 上一个实例没退干净是常态。Node 默认吐一段 EADDRINUSE 堆栈，
+ * 那段东西不告诉你是谁占着，也不告诉你怎么办。
+ */
+try {
+  await app.listen({ port: config.port, host: "0.0.0.0" });
+} catch (err) {
+  if ((err as NodeJS.ErrnoException)?.code !== "EADDRINUSE") throw err;
+  console.error(`
+  端口 ${config.port} 已经被占用了。
+
+  多半是上一个 Claudio 还在跑（改代码时 --watch 偶尔会留下孤儿进程）。${
+    occupant(config.port) ?? ""
+  }
+  两条路：
+    kill 掉它            pkill -f "src/server.ts"
+    或者换个端口          PORT=8081 npm run dev
+`);
+  process.exit(1);
+}
+
 const scheme = tls ? "https" : "http";
 const lan = lanUrl(scheme, config.port);
 console.log(`

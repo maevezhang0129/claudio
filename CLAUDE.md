@@ -28,6 +28,7 @@ npm run verify      # 29 pipeline assertions + 24 matching edge cases; costs not
 npm run typecheck
 npm run certs       # sign a local TLS cert (needs mkcert); re-run when the LAN IP changes
 npm run netease:api # start the self-hosted NeteaseCloudMusicApi on :3000
+npm run netease:login # scan a QR to obtain the NetEase cookie; writes it into .env
 npm run prefs       # derive prefs from the library export; --show to print what is stored
 ```
 

@@ -15,6 +15,7 @@
     "icons": "node scripts/make-icons.mjs",
     "certs": "node scripts/make-certs.mjs",
     "netease:api": "npx -y NeteaseCloudMusicApi@4.32.0",
+    "netease:login": "node scripts/netease-login.mjs",
     "prefs": "node scripts/derive-prefs.mjs"
   },
   "dependencies": {

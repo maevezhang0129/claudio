@@ -24,7 +24,7 @@ code comments; they stay as they are.
 ```bash
 npm run dev:stub    # offline — no API calls, no cost; drives the UI from fixed scripts
 npm run dev         # live — needs a model API key
-npm run verify      # 29 pipeline assertions + 24 matching edge cases; costs nothing
+npm run verify      # 34 pipeline assertions + 33 matching edge cases; costs nothing
 npm run typecheck
 npm run certs       # sign a local TLS cert (needs mkcert); re-run when the LAN IP changes
 npm run netease:api # start the self-hosted NeteaseCloudMusicApi on :3000
@@ -157,6 +157,12 @@ history-recalled queues have no such row and the update silently matched nothing
 while still answering `ok`. Fragment ④ excludes `queued` rows: feeding back "you
 played this" about a track nobody opened is how the model ends up reinforcing a
 direction the owner never chose.
+
+"Played" means six tenths of **the media in the player**, whose duration the
+client reports from `audio.duration`. Never reintroduce an absolute seconds
+threshold: one existed for previews and silently relabelled abandoned full
+tracks as listened the moment full playback was switched on. Rows store that
+duration so a future change to the rule can be applied to old data.
 
 The skip line is the only negative signal in the whole system — everything else
 (corpus, library export, derived prefs) describes things the owner likes. Do not

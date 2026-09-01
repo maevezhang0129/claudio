@@ -37,7 +37,7 @@ Open https://localhost:8080. The startup banner also prints a LAN address so you
 can reach it from your phone on the same Wi-Fi.
 
 ```bash
-npm run verify      # 29 pipeline assertions + 24 matching edge cases — costs nothing
+npm run verify      # 34 pipeline assertions + 33 matching edge cases — costs nothing
 npm run typecheck
 ```
 
@@ -394,6 +394,26 @@ reference and bound handler keeps working and the two views cannot drift apart.
 The `<audio>` element stays behind in the main document; moving it would cut
 playback. Chrome only; elsewhere the button says so.
 
+### What counts as "played" depends on the medium
+
+The threshold was "six tenths of it, **or** thirty seconds" — the second half
+added back when 30-second previews were all there was, so a preview heard to the
+end would not read as a skip.
+
+Turning on full playback made that half wrong the same minute. Thirty-one seconds
+of a 4:36 track satisfied it, so abandoning a song after half a minute was filed
+as having listened to it. That corrupts the only negative signal in the system.
+
+It is six tenths, full stop, because the duration the client reports is the
+duration of **the media in the player** — `audio.duration`, not the track's
+metadata. A preview heard to the end is 30 of 30; a full track heard for three
+minutes is 180 of 276. One rule, correct on both. The absolute figure survives
+only for when the duration is unknown.
+
+Rows now also store that duration. Without it a row reading "listened 77 seconds"
+cannot be re-judged later — preview heard through, or full track abandoned early?
+— so a change to the rule can never be applied backwards.
+
 ### The `plays` table was recording recommendations
 
 A row was written the moment a track entered the queue, and the client never
@@ -570,7 +590,7 @@ npm run certs                             # 换 WiFi、IP 变了就重跑
 打开 https://localhost:8080。启动横幅还会打印局域网地址，手机连同一 WiFi 可直接访问。
 
 ```bash
-npm run verify      # 29 项管线断言 + 24 条匹配边界用例，不花钱
+npm run verify      # 34 项管线断言 + 33 条匹配边界用例，不花钱
 npm run typecheck
 ```
 
@@ -867,6 +887,23 @@ iOS 只允许在用户手势里发起第一次 `speak()`，所以这个开关同
 面板是**搬**进那个窗口的，不是复制：所以所有元素引用和已绑定的处理器继续有效，
 两边不可能各说各话。`<audio>` 留在主文档 —— 搬动它播放就断了。
 仅 Chrome 支持，其他浏览器点了会明说。
+
+### 「算听过」的门槛取决于放的是什么
+
+原来的判定是「听满六成，**或者**听够 30 秒」。后半句是当年只有 30 秒试听时
+加的，为了让一段听到底的试听不被当成跳过。
+
+整曲播放打开的那一分钟，后半句就错了：一首 4:36 的歌听 31 秒也满足它，
+于是「听了半分钟就切掉」被记成了「听过」。
+那会污染系统里**唯一的负反馈**。
+
+现在只剩「六成」这一条，因为前端上报的时长是**播放器里那段媒体**的时长
+（`audio.duration`），不是曲目元数据。试听听到底是 30/30，
+整曲听三分钟是 180/276 —— 同一条规则两边都对。
+那个绝对值只在拿不到时长时才兜底。
+
+每一行现在还会记下那段媒体多长。没有它，一行「听了 77 秒」事后无从判断：
+究竟是听完的试听，还是听了个开头就切的整曲。规则一改，历史数据就再也重算不了。
 
 ### `plays` 表一直记的是推荐，不是收听
 

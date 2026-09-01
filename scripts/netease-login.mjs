@@ -75,6 +75,25 @@ export function extractMusicU(raw) {
 }
 
 /**
+ * 把用户粘进来的东西整成 `MUSIC_U=xxx`。
+ *
+ * 三种粘法都接受，因为三种都会发生：
+ *   整段 cookie   MUSIC_U=abc; __csrf=x; Path=/
+ *   带键名        MUSIC_U=abc
+ *   只有值本身    abc
+ * 手工编辑 .env 最常见的两个错就是漏掉 MUSIC_U= 前缀、以及带上引号。
+ * 与其在文档里叮嘱，不如在这里一并吃掉。
+ */
+export function normalizeCookie(raw) {
+  const s = (raw ?? "").trim().replace(/^["']|["']$/g, "").trim();
+  if (!s) return null;
+  const m = /MUSIC_U=([^;,\s]+)/.exec(s);
+  if (m) return `MUSIC_U=${m[1]}`;
+  // 只粘了值：MUSIC_U 的值是 URL 安全字符，借此排除「粘错了东西」
+  return /^[A-Za-z0-9_\-%.]+$/.test(s) ? `MUSIC_U=${s}` : null;
+}
+
+/**
  * 合并进 .env 的文本：已有那个键就替换那一行，没有就追加。
  * 其余内容一个字都不动 —— 这个文件里还有模型的 API key。
  */
@@ -152,6 +171,45 @@ async function loginBySms(rl) {
   }
   console.error("\n  三次都没通过。重新跑一次会发一条新验证码。\n");
   return false;
+}
+
+// ── 直接粘 cookie ─────────────────────────────────────
+//
+// 风控（code=10004「当前登录存在安全风险」）会挡住脚本发起的登录，
+// 但浏览器里的登录不受影响 —— 那条路走的是官方客户端。
+// 所以最后总有这一条退路：在浏览器里登录，把 cookie 搬过来。
+
+async function loginByPaste(rl) {
+  console.log(`
+  在浏览器里登录 https://music.163.com，然后：
+
+    Mac：Cmd+Option+I 打开开发者工具（F12 在 Mac 上是音量键），
+         或者在页面上右键 → 检查
+    → Application → Storage → Cookies → https://music.163.com
+    → 找到 MUSIC_U 那一行，复制它的 Value
+
+  整段 cookie、带 MUSIC_U= 前缀、或者只有值本身，粘哪种都行。
+`);
+  const cookie = normalizeCookie(await rl.question("  粘贴："));
+  if (!cookie) {
+    console.error("\n  这看起来不像 MUSIC_U 的值。\n");
+    return false;
+  }
+
+  // 先验后写。写进去再让用户自己去发现「怎么还是 0:30」太差了。
+  const st = await api("/login/status", { cookie });
+  const profile = st?.data?.profile;
+  if (!profile) {
+    console.error(`
+  这个 cookie 服务端不认（拿不到账号信息）。常见原因：
+    · 复制时漏了字符 —— 那串有 300 字符左右，务必整段复制
+    · 浏览器那边其实没登录成功
+    · cookie 已经过期
+`);
+    return false;
+  }
+  console.log(`  校验通过：登录为「${profile.nickname}」`);
+  return succeed(cookie);
 }
 
 // ── 扫码 ──────────────────────────────────────────────
@@ -251,19 +309,26 @@ async function main() {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   let ok = false;
   try {
-    let mode = argv.includes("--qr") ? "qr" : argv.includes("--sms") ? "sms" : null;
+    let mode = argv.includes("--qr") ? "qr"
+      : argv.includes("--sms") ? "sms"
+      : argv.includes("--paste") ? "paste"
+      : null;
     if (!mode) {
       console.log(`
   选择登录方式：
 
-    1) 手机验证码 —— 不需要装 App，推荐
+    1) 手机验证码 —— 不需要装 App
     2) 扫码       —— 需要**网易云音乐 App** 的扫一扫
                      （相机、浏览器、微信扫都不行）
+    3) 粘贴 cookie —— 在浏览器里登录后把 cookie 搬过来。
+                     1 和 2 撞上风控（code=10004）时走这条，它不会被拦。
 `);
-      const pick = (await rl.question("  输入 1 或 2（回车默认 1）：")).trim();
-      mode = pick === "2" ? "qr" : "sms";
+      const pick = (await rl.question("  输入 1 / 2 / 3（回车默认 1）：")).trim();
+      mode = pick === "2" ? "qr" : pick === "3" ? "paste" : "sms";
     }
-    ok = mode === "qr" ? await loginByQr() : await loginBySms(rl);
+    ok = mode === "qr" ? await loginByQr()
+      : mode === "paste" ? await loginByPaste(rl)
+      : await loginBySms(rl);
   } finally {
     rl.close();
   }

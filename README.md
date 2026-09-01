@@ -203,6 +203,14 @@ and completes nothing here, leaving the terminal waiting forever while every
 signal on the phone says it worked. Only the NetEase Music app's own scanner
 finishes that handshake. The SMS path needs no app at all.
 
+Both can still be refused: NetEase answers `10004`, "this sign-in carries
+security risk", to logins that do not come from an official client, and a proxy
+on the route makes that likelier. So there is a third option that cannot be
+refused -- log in with the browser, paste the cookie. It takes the whole cookie
+string, the `MUSIC_U=` form, or the bare value, and checks it against the account
+endpoint **before** writing: a credential that does not work should fail here,
+not silently three days later as "why is everything still 0:30".
+
 Search and metadata work fine anonymously, and the Mandarin catalog really is
 better — `陈奕迅 富士山下` comes back first, where iTunes needs the similarity
 threshold to find it. (An earlier note here quoted 87% against 77% from a single
@@ -695,6 +703,13 @@ npm run netease:login   # 手机验证码或扫码，cookie 自动写进 .env
 但这边的握手一步都没完成，终端会一直等下去，
 而手机上每一个信号都在说「成功了」。只有网易云音乐 App 自己的扫一扫
 能完成那个握手。验证码那条路根本不需要 App。
+
+两条路都可能被拒：网易云对非官方客户端发起的登录会返回 `10004`
+「当前登录存在安全风险」，链路上有代理时更容易触发。
+所以还有第三条不会被拒的路 —— 在浏览器里登录，把 cookie 粘过来。
+整段 cookie、`MUSIC_U=` 形式、或只有值本身都接受，
+而且**写入之前先拿账号接口验一遍**：一个不能用的凭据应该在这里就失败，
+而不是三天后以「怎么还全是 0:30」的形式浮出来。
 
 匿名状态下搜索和元数据都正常，华语曲库确实更全 —— 搜「陈奕迅 富士山下」
 第一条就是原版，iTunes 那边要靠相似度兜。（这里早先引过「87% 对 77%」，

@@ -102,8 +102,11 @@ store.appendMessage("t", "assistant", r1.response.say);
 // 进队列 ≠ 被听。第一首上报听完，第二首上报只听了 4 秒 ——
 // 第 2 轮的记忆片应当把这两件事说成不同的事，第三首则完全不该出现。
 for (const t of tracks1) store.recordQueued("t", t);
-if (tracks1[0]) store.recordListen("t", tracks1[0], 30_000, tracks1[0].durationMs);
-if (tracks1[1]) store.recordListen("t", tracks1[1], 4_000, tracks1[1].durationMs);
+// 时长一律按「播放器里那段媒体」算，不是曲目元数据的整曲长度：
+// 30 秒试听放到底是 30/30，整曲听 3 分钟是 180/276，同一条规则两边都成立。
+const PREVIEW_MS = 30_000;
+if (tracks1[0]) store.recordListen("t", tracks1[0], 30_000, PREVIEW_MS);
+if (tracks1[1]) store.recordListen("t", tracks1[1], 4_000, PREVIEW_MS);
 
 // 调度器排的节目单、从历史里重新载入的旧队列，plays 表里都没有对应的
 // queued 行。收听上报**不能**依赖那一行存在 —— 曾经它是一条
@@ -250,6 +253,18 @@ const checks: [string, boolean][] = [
   ["跳过的如实说成跳过", ctx2.volatile.includes("秒就切走了")],
   ["只进过队列、没被听的不算播放记录",
     store.recentPlays(50).every((p) => p.providerId !== tracks1[2]?.providerId)],
+  // 曾经还有一条「听够 30 秒就算听完」的绝对门槛。配上 cookie、整曲能播之后
+  // 它立刻变成错的：一首 4:36 的歌听 31 秒被判成「听完了」，
+  // 而那会污染系统里唯一的负反馈。
+  ["整曲听 31 秒算跳过",
+    store.recordListen("thresh", { provider: "itunes", providerId: "th-1",
+      title: "t", artist: "a" }, 31_000, 276_000) === "skipped"],
+  ["整曲听过六成算听完",
+    store.recordListen("thresh", { provider: "itunes", providerId: "th-2",
+      title: "t", artist: "a" }, 180_000, 276_000) === "played"],
+  ["30 秒试听放到底算听完",
+    store.recordListen("thresh", { provider: "itunes", providerId: "th-3",
+      title: "t", artist: "a" }, 30_000, 30_000) === "played"],
   ["没被推荐过的曲目也能记下收听（调度器路径）",
     store.recentPlays(50).some((p) => p.providerId === NEVER_QUEUED.providerId)],
   ["历史回灌为 user→assistant", history.length === 2 && history[0]!.role === "user"],

@@ -45,6 +45,10 @@ export class Store {
     // 这两列把它们分开：outcome 说这首到底有没有被听，listened_ms 说听了多久。
     this.addColumnIfMissing("plays", "outcome", "TEXT NOT NULL DEFAULT 'queued'");
     this.addColumnIfMissing("plays", "listened_ms", "INTEGER NOT NULL DEFAULT 0");
+    // 那段媒体本身有多长。不存的话，一行「听了 77 秒」事后无从判断
+    // 当时是 30 秒试听（听完了）还是整曲（听了个开头就切）——
+    // 判定规则一旦改动，历史数据就再也重算不了。
+    this.addColumnIfMissing("plays", "duration_ms", "INTEGER");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS messages (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +75,9 @@ export class Store {
         -- played  真的听完了（或听够了）
         -- skipped 播了几秒就切走
         outcome     TEXT    NOT NULL DEFAULT 'queued',
-        listened_ms INTEGER NOT NULL DEFAULT 0
+        listened_ms INTEGER NOT NULL DEFAULT 0,
+        -- 那段媒体本身多长。有它才能在判定规则变化后重算历史。
+        duration_ms INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_plays_time ON plays(played_at DESC);
 
@@ -218,9 +224,16 @@ export class Store {
   /**
    * 前端上报「这首实际听了多久」。
    *
-   * 判定听完的门槛取两者之一：听满六成，或者听够 30 秒。
-   * 后一条是为 30 秒试听准备的 —— 试听放到底就是听完了，
-   * 但按整曲时长算永远只有 10%，会被误判成跳过。
+   * 判定听完的门槛：**听满这段媒体的六成**。
+   *
+   * 关键在于「这段媒体」—— 前端发来的 durationMs 取自播放器里实际那段音频
+   * （`audio.duration`），不是曲目元数据的整曲长度。所以 30 秒试听放到底
+   * 是 30/30，整曲听到 3 分钟是 180/276，同一条规则两边都对。
+   *
+   * 这里曾经还有一条「或者听够 30 秒就算听完」的绝对门槛，
+   * 是当年只有试听时加的兜底。配上 cookie、整曲能播之后它立刻变成了错的：
+   * 一首 4:36 的歌听 31 秒就切走，会被判成「听完了」。
+   * 那会污染系统里唯一的负反馈。现在只在**拿不到时长**时才退回它。
    *
    * 这里**插入新行**，而不是去改那条 queued 的记录。
    * 原先是改：`UPDATE ... WHERE provider_id = ?`。那个写法只在
@@ -237,16 +250,17 @@ export class Store {
     listenedMs: number,
     durationMs?: number,
   ): "played" | "skipped" {
-    const enough =
-      listenedMs >= 30_000 ||
-      (durationMs ? listenedMs >= durationMs * 0.6 : false);
+    const enough = durationMs
+      ? listenedMs >= durationMs * 0.6
+      : listenedMs >= 30_000;   // 时长未知时的兜底
     const outcome = enough ? "played" : "skipped";
 
     this.db
       .prepare(
         `INSERT INTO plays
-           (session, provider, provider_id, title, artist, played_at, outcome, listened_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (session, provider, provider_id, title, artist, played_at,
+            outcome, listened_ms, duration_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         session,
@@ -257,6 +271,7 @@ export class Store {
         Date.now(),
         outcome,
         Math.round(listenedMs),
+        durationMs ? Math.round(durationMs) : null,
       );
     return outcome;
   }

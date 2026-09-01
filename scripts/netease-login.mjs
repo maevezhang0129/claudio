@@ -42,14 +42,30 @@ const QR_PREFIX = "claudio-netease-qr-";
 const POLL_MS = 2000;
 const GIVE_UP_MS = 3 * 60_000;
 
+/**
+ * 调一次接口。
+ *
+ * **非 2xx 也照样返回响应体**，不抛异常。这套服务把业务失败也表达成
+ * HTTP 错误码，但响应体里写着真正的原因：
+ *   验证码错了  → HTTP 503 {"code":503,"message":"验证码错误"}
+ * 之前这里 `if (!res.ok) throw`，把那句话直接扔了，用户看到的是一段
+ * Node 堆栈而不是「验证码错误」—— 报错的时候把唯一有用的信息丢掉，
+ * 比不报错更糟。
+ *
+ * 只有真正的传输失败（连不上、超时）才会抛出来。
+ */
 async function api(route, params = {}) {
   const url = new URL(BASE + route);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   // 这套服务对同一 IP 的请求缓存两分钟，加时间戳绕开陈旧结果
   url.searchParams.set("timestamp", String(Date.now()));
   const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-  if (!res.ok) throw new Error(`${route} 返回 ${res.status}`);
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    // 不是 JSON —— 合成一个同形状的对象，调用方不必为此写第二套分支
+    return { code: res.status, message: `${route} 返回 ${res.status}` };
+  }
 }
 
 /** 只留 MUSIC_U 那一段 —— 其余字段没用，而且越长越容易在复制粘贴里出错 */
@@ -123,14 +139,19 @@ async function loginBySms(rl) {
   }
   console.log("  验证码已发送。");
 
-  const captcha = (await rl.question("  收到的验证码：")).trim();
-  const res = await api("/login/cellphone", { phone, captcha });
-  if (res.code !== 200) {
+  // 允许重输。短信有发送频率限制，为了一次手滑就重新走一遍太亏了，
+  // 而验证码在网易云那边有几分钟有效期，重试完全来得及。
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const captcha = (await rl.question("  收到的验证码：")).trim();
+    const res = await api("/login/cellphone", { phone, captcha });
+    if (res.code === 200) return succeed(res.cookie);
+
     // 把服务端原话带出来 —— 验证码错、过期、被风控，处理方式各不相同
-    console.error(`\n  登录失败（code=${res.code}）：${res.message ?? res.msg ?? ""}\n`);
-    return false;
+    console.error(`  登录失败（code=${res.code}）：${res.message ?? res.msg ?? ""}`);
+    if (attempt < 3) console.error("  再试一次（不用重新发短信）。\n");
   }
-  return succeed(res.cookie);
+  console.error("\n  三次都没通过。重新跑一次会发一条新验证码。\n");
+  return false;
 }
 
 // ── 扫码 ──────────────────────────────────────────────
@@ -215,6 +236,7 @@ async function loginByQr() {
 // ── 入口 ──────────────────────────────────────────────
 
 async function main() {
+  // 只有连不上才会抛 —— 业务错误现在走返回值，不走异常
   try {
     await api("/login/qr/key");
   } catch {

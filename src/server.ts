@@ -78,12 +78,16 @@ const brainReady =
 const MAX_ALTERNATES = 1;
 
 /**
- * 每个会话上一轮实际给出了几首库外曲目。
+ * 上一轮实际给出了几首库外曲目。
  *
- * 只放内存：它唯一的用途是下一轮把话说回给模型，重启后从头数一遍
- * 不会有任何损失，不值得为它开一张表。
+ * **不按会话分**。这条约束是关于这个听众的，不是关于某一段对话的：
+ * 前端每打开一次页面就换一个新会话，按会话记的话，
+ * 一场收听的第一句永远拿不到回灌 —— 而第一句恰恰最重要。
+ *
+ * 只放内存：唯一的用途是下一轮把话说回给模型，服务重启后从头数一遍
+ * 没有任何损失，不值得为它开一张表。
  */
-const lastFreshBySession = new Map<string, number>();
+let lastFresh: number | undefined;
 
 /** 解析后的曲目 + 匹配置信度，发给前端 */
 interface ResolvedTrack extends Track {
@@ -146,7 +150,7 @@ app.post<{ Body: { message?: string; session?: string } }>(
       justQueued: store.recentQueuedAsContext(session, 10),
       weather,
       calendar,
-      lastFresh: lastFreshBySession.get(session),
+      lastFresh,
     });
 
     const history = store.recentMessages(session, 20).map((m) => ({
@@ -204,7 +208,7 @@ app.post<{ Body: { message?: string; session?: string } }>(
     // 数候选集会得出「库外 6 首」而队列里只有 3 首这种自相矛盾的数字，
     // 而且回灌给下一轮的也是个虚高的值，模型会以为自己已经做到了。
     const fresh = countFresh(tracks, await familiarArtists(config.rootDir));
-    lastFreshBySession.set(session, fresh);
+    lastFresh = fresh;
 
     const turn = {
       say: dj.say,

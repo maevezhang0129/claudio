@@ -33,7 +33,30 @@ const els = {
   pfRecent: $("pf-recent"), pfPlan: $("pf-plan"), planBuild: $("plan-build"),
 };
 
-const SESSION = "default";
+/**
+ * 每次打开页面都是一场新的收听，会话 ID 也跟着换。
+ *
+ * 这一条同时解决两件事：
+ *   1. 界面上不再堆着上次的对话 —— 电台开机时应该是干净的
+ *   2. 模型不再看见自己过往的回复。实测这才是「推荐永远来自曲库」的原因：
+ *      同一条 prompt，全新会话给 3/4 首库外，攒了十几轮的老会话给 0 首。
+ *      历史里每条 say 都在写「你库里常听的…」，模型在模仿自己的行文，
+ *      压过了提示词末尾那条「至少两首库外」。缩短窗口没用，换会话才有用。
+ *
+ * 上一场的 ID 留在 localStorage：只为把最后那组歌预置进播放器，
+ * 不为把对话再画一遍。
+ */
+const SESSION = `radio-${Date.now()}`;
+const PREV_SESSION_KEY = "claudio.lastSession";
+const PREV_SESSION = (() => {
+  try {
+    const prev = localStorage.getItem(PREV_SESSION_KEY);
+    localStorage.setItem(PREV_SESSION_KEY, SESSION);
+    return prev;
+  } catch {
+    return null;   // 隐私模式下拿不到，不影响使用
+  }
+})();
 const state = {
   queue: [],        // 当前队列（最近一次推荐）
   index: -1,        // 正在播的下标，-1 表示无
@@ -670,28 +693,22 @@ document.addEventListener("click", (e) => {
 
 // ─────────────────────────────── 历史恢复
 
+/**
+ * 开机时把上一场的最后一组歌预置进播放器 —— 但**不重画对话**。
+ *
+ * 播放器空着的话，页面在你按之前看着就是死的（design/README.md 里写过
+ * 这条：电台总该显示它的播放器）。而重画对话是另一回事：
+ * 那些字既占屏幕，也会顺着 /api/history 回到模型眼前。
+ */
 async function restore() {
+  if (!PREV_SESSION) return;
   try {
-    const { turns } = await api(`/api/history?session=${SESSION}`);
-    if (!turns.length) return;
-    els.intro?.remove();
-
-    let lastPayload = null;
-    for (const t of turns) {
-      const at = new Date(t.createdAt);
-      const hhmm = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-      if (t.role === "user") addUser(t.content);
-      else if (t.payload) {
-        addDJ(t.payload, { at: hhmm });
-        // 历史花费在这里一次性加总。放在 addDJ 里的话，
-        // 每刷新一次页面就会把整段历史再累加一遍，金额越刷越大。
-        state.spentUsd += t.payload.usage?.estimatedUsd ?? 0;
-        lastPayload = t.payload;
-      }
-      else addDJ({ say: t.content }, { at: hhmm });
-    }
-    // 最后一轮的曲目装进队列，接着上次听
-    if (lastPayload?.tracks?.length) loadQueue(lastPayload.tracks);
+    const { turns } = await api(`/api/history?session=${PREV_SESSION}`);
+    const last = [...turns].reverse().find((t) => t.payload?.tracks?.length);
+    if (!last) return;
+    loadQueue(last.payload.tracks);
+    els.queueCount.textContent =
+      `${last.payload.tracks.length} ${last.payload.tracks.length === 1 ? "TRACK" : "TRACKS"}`;
   } catch {
     // 恢复失败不该挡住使用
   }

@@ -8,7 +8,7 @@
  * 点一下可以把那一组重新载入队列。
  */
 
-import { tts } from "./tts.js";
+import { tts, chineseVoices } from "./tts.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -26,9 +26,11 @@ const els = {
   float: $("float"), miniHost: $("mini-host"),
   miniClock: $("mini-clock"), miniSlot: $("mini-slot"), miniNp: $("mini-np"),
   miniRail: $("mini-rail"), miniFill: $("mini-fill"),
+  miniArt: $("mini-art"), miniWave: $("mini-wave"),
   miniPrev: $("mini-prev"), miniToggle: $("mini-toggle"), miniNext: $("mini-next"),
   viewRadio: $("view-radio"), viewProfile: $("view-profile"),
   brand: $("brand"), back: $("back"), reset: $("reset"), mic: $("mic"),
+  voicePick: $("voice-pick"), voiceTry: $("voice-try"), voiceNote: $("voice-note"),
   sPlayed: $("s-played"), sPeak: $("s-peak"), sRoutines: $("s-routines"),
   pfRecent: $("pf-recent"), pfPlan: $("pf-plan"), planBuild: $("plan-build"),
 };
@@ -43,20 +45,11 @@ const els = {
  *      历史里每条 say 都在写「你库里常听的…」，模型在模仿自己的行文，
  *      压过了提示词末尾那条「至少两首库外」。缩短窗口没用，换会话才有用。
  *
- * 上一场的 ID 留在 localStorage：只为把最后那组歌预置进播放器，
- * 不为把对话再画一遍。
+ * 上一场的队列由服务端跨会话找（/api/last-queue），不靠前端记 ——
+ * 中间夹一个开了就关的空会话，只回看一场就断链了。
  */
 const SESSION = `radio-${Date.now()}`;
-const PREV_SESSION_KEY = "claudio.lastSession";
-const PREV_SESSION = (() => {
-  try {
-    const prev = localStorage.getItem(PREV_SESSION_KEY);
-    localStorage.setItem(PREV_SESSION_KEY, SESSION);
-    return prev;
-  } catch {
-    return null;   // 隐私模式下拿不到，不影响使用
-  }
-})();
+
 const state = {
   queue: [],        // 当前队列（最近一次推荐）
   index: -1,        // 正在播的下标，-1 表示无
@@ -297,6 +290,9 @@ function setNowPlaying(t) {
   );
   paint(els.npTitle);
   paint(els.miniNp);
+  if (els.miniArt) {
+    els.miniArt.style.backgroundImage = t.artworkUrl ? `url("${t.artworkUrl}")` : "";
+  }
 }
 
 function renderQueue() {
@@ -354,6 +350,9 @@ function play(i) {
 
   state.index = i;
   beginListen(t);
+  // 要读频域样本就必须声明跨域。音源不支持 CORS 时加载会失败，
+  // 下面的 error 处理会摘掉它重来。
+  if (!audioGraphBroken) els.audio.crossOrigin = "anonymous";
   els.player.hidden = false;
   els.player.classList.remove("idle");
   setNowPlaying(t);
@@ -408,8 +407,52 @@ els.audio.addEventListener("timeupdate", () => {
     if (els.miniFill) els.miniFill.style.width = pct;
   }
 });
-els.audio.addEventListener("play", () => { resumeListen(); syncTransport(); });
-els.audio.addEventListener("pause", () => { pauseListen(); syncTransport(); });
+els.audio.addEventListener("play", () => { resumeListen(); startWave(); syncTransport(); });
+els.audio.addEventListener("pause", () => { pauseListen(); stopWave(); syncTransport(); });
+/**
+ * 播放失败的两种可能，按发生频率依次处理。
+ *
+ *   ① 地址过期。网易云的直链是限时的，而队列常常来自很久以前 ——
+ *      开机恢复的上一场、点回去的旧队列、调度器早上排的节目单。
+ *      曲目没问题，只是钥匙过期了：重新问服务端要一把。
+ *   ② crossOrigin 引起的。频谱要读音频样本就必须声明跨域，
+ *      万一将来接入的音源不支持 CORS，加载会直接失败。
+ *      那就摘掉它、从此关掉频谱 —— 没有波纹只是难看，没有声音是坏了。
+ */
+let refreshedFor = null;
+
+els.audio.addEventListener("error", async () => {
+  const t = state.queue[state.index];
+  if (!t) return;
+
+  // ① 同一首只换一次地址，避免坏歌把自己卡在死循环里
+  if (refreshedFor !== t.providerId) {
+    refreshedFor = t.providerId;
+    try {
+      const q = new URLSearchParams({ title: t.title, artist: t.artist });
+      const { url } = await api(`/api/stream?${q}`);
+      if (url) {
+        if (t.fullPlayback) t.fullPlayback.ref = url; else t.previewUrl = url;
+        els.audio.src = url;
+        els.audio.play().catch(() => {});
+        return;
+      }
+    } catch {
+      // 换不到就往下走 ②
+    }
+  }
+
+  // ② 退掉 crossOrigin 再试一次
+  if (!audioGraphBroken && els.audio.crossOrigin) {
+    audioGraphBroken = true;
+    stopWave();
+    const src = els.audio.src;
+    els.audio.removeAttribute("crossorigin");
+    els.audio.src = src;
+    els.audio.play().catch(() => {});
+  }
+});
+
 els.audio.addEventListener("ended", () => {
   flushListen();   // 放到底了，先把这一首结清再往下走
   // 电台会接着往下播
@@ -426,6 +469,73 @@ els.rail.onclick = (e) => {
   const r = els.rail.getBoundingClientRect();
   els.audio.currentTime = ((e.clientX - r.left) / r.width) * els.audio.duration;
 };
+
+// ─────────────────────────────── 频谱
+//
+// 画的是**真实音频**的频域数据，不是一段定时动画。
+// 前提是音频直链允许跨域读取样本 —— 实测网易云（music.126.net）和
+// iTunes 试听（audio-ssl.itunes.apple.com）都返回 Access-Control-Allow-Origin: *。
+//
+// 代价是 <audio> 必须带 crossOrigin="anonymous"：一旦将来接入的音源
+// **不**支持 CORS，加载会直接失败。所以下面留了退路：一旦播放报错，
+// 就摘掉这个属性重来，并从此关掉频谱 —— 宁可没有波纹，不能没有声音。
+
+let analyser = null;
+let waveTimer = null;
+let audioGraphBroken = false;
+
+/** 首次播放时才建音频图 —— AudioContext 必须在用户手势之后创建 */
+function ensureAnalyser() {
+  if (analyser || audioGraphBroken) return analyser;
+  try {
+    const Ctx = window.AudioContext ?? window.webkitAudioContext;
+    if (!Ctx) return null;
+    const ctx = new Ctx();
+    const src = ctx.createMediaElementSource(els.audio);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 128;
+    analyser.smoothingTimeConstant = 0.75;
+    src.connect(analyser);
+    analyser.connect(ctx.destination);   // 不接回去就没声音了
+    return analyser;
+  } catch {
+    audioGraphBroken = true;   // 跨域被拒等 —— 放弃频谱，保住播放
+    return null;
+  }
+}
+
+function drawWave() {
+  const cv = els.miniWave;
+  if (!cv || !analyser) return;
+  const g = cv.getContext("2d");
+  const bins = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(bins);
+
+  const w = cv.width, h = cv.height;
+  g.clearRect(0, 0, w, h);
+  // 低频那几格能量最集中，全画出来右半边永远是空的，所以只取前 60%
+  const used = Math.floor(bins.length * 0.6);
+  const bw = w / used;
+  g.fillStyle = "#4ADE80";
+  for (let i = 0; i < used; i++) {
+    const v = bins[i] / 255;
+    const bh = Math.max(1, v * h);
+    g.fillRect(i * bw, h - bh, Math.max(1, bw - 1), bh);
+  }
+}
+
+function startWave() {
+  if (!ensureAnalyser() || waveTimer) return;
+  const tick = () => { drawWave(); waveTimer = requestAnimationFrame(tick); };
+  waveTimer = requestAnimationFrame(tick);
+}
+
+function stopWave() {
+  if (waveTimer) cancelAnimationFrame(waveTimer);
+  waveTimer = null;
+  const cv = els.miniWave;
+  if (cv) cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
+}
 
 // ─────────────────────────────── 悬浮窗
 //
@@ -701,14 +811,9 @@ document.addEventListener("click", (e) => {
  * 那些字既占屏幕，也会顺着 /api/history 回到模型眼前。
  */
 async function restore() {
-  if (!PREV_SESSION) return;
   try {
-    const { turns } = await api(`/api/history?session=${PREV_SESSION}`);
-    const last = [...turns].reverse().find((t) => t.payload?.tracks?.length);
-    if (!last) return;
-    loadQueue(last.payload.tracks);
-    els.queueCount.textContent =
-      `${last.payload.tracks.length} ${last.payload.tracks.length === 1 ? "TRACK" : "TRACKS"}`;
+    const { turn } = await api("/api/last-queue");
+    if (turn?.tracks?.length) loadQueue(turn.tracks);
   } catch {
     // 恢复失败不该挡住使用
   }
@@ -762,7 +867,42 @@ function renderPlan(plan) {
   }
 }
 
+/**
+ * 声音选择器。
+ *
+ * 排序交给 tts.js，这里只负责把它画出来 —— 因为「哪个好听」
+ * 最终只有耳朵能定，代码能做的是把候选按推荐程度排好、并让试听方便。
+ */
+function initVoices() {
+  const sel = els.voicePick;
+  if (!sel) return;
+  const voices = chineseVoices();
+  if (!voices.length) {
+    els.voiceNote.textContent = "这个浏览器没有可用的中文语音。";
+    sel.hidden = true;
+    els.voiceTry.hidden = true;
+    return;
+  }
+  sel.replaceChildren(...voices.map((v) => {
+    const o = el("option", null, v.name);
+    o.value = v.name;
+    return o;
+  }));
+  sel.value = tts.voiceName ?? voices[0].name;
+  sel.onchange = () => { tts.setVoice(sel.value); tts.preview(); };
+  els.voiceTry.onclick = () => tts.preview();
+
+  // 装了高质量语音就不必再提示
+  const hasPremium = voices.some((v) => /siri|premium|enhanced|增强/i.test(v.name));
+  els.voiceNote.textContent = hasPremium
+    ? "选好之后点试听。"
+    : "都是系统自带的基础语音。想要明显更好的：系统设置 → 辅助功能 → " +
+      "朗读内容 → 系统声音 → 管理声音，下载中文的「增强」或 Siri 语音，" +
+      "下载完刷新页面就会出现在这里。";
+}
+
 async function loadProfile() {
+  initVoices();
   loadPlan();
   try {
     const p = await api("/api/profile");

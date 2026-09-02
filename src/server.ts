@@ -243,6 +243,40 @@ app.get<{ Querystring: { session?: string } }>("/api/history", async (req) => {
   return { turns: store.historyWithPayload(session, 40) };
 });
 
+/**
+ * 给一首歌换一个新鲜的播放地址。
+ *
+ * 网易云的直链是限时的，而队列可能来自很久以前：开机恢复的上一场、
+ * 对话流里点回去的旧队列、调度器早上排好的节目单 —— 到播的时候
+ * 那串地址早就 403 了。曲目本身没问题，只是那把钥匙过期了。
+ *
+ * 重新走一遍 resolve 而不是单独调 song/url：一来复用同一套匹配逻辑，
+ * 二来 provider 之间的差异不该泄漏到这个接口上。
+ */
+app.get<{ Querystring: { title?: string; artist?: string } }>(
+  "/api/stream",
+  async (req, reply) => {
+    const { title, artist } = req.query;
+    if (!title || !artist) {
+      return reply.code(400).send({ error: "需要 title 和 artist" });
+    }
+    const r = await music.resolve({ title, artist }).catch(() => null);
+    if (!r || !playable(r.track)) {
+      return reply.code(404).send({ error: "现在拿不到这首歌的播放地址" });
+    }
+    return {
+      url: r.track.fullPlayback?.ref ?? r.track.previewUrl,
+      durationMs: r.track.durationMs,
+    };
+  },
+);
+
+/**
+ * 最近一次有曲目的推荐。开机预置播放器用 ——
+ * 前端不重画对话，但播放器不该是空的。
+ */
+app.get("/api/last-queue", async () => ({ turn: store.lastQueue() }));
+
 /** 清空会话。调语料时频繁用到 —— 旧历史会污染新语料的效果判断。 */
 app.delete<{ Params: { id: string } }>("/api/session/:id", async (req) => {
   store.clearSession(req.params.id);

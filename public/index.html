@@ -119,6 +119,15 @@
   </div>
 
   <div class="pf-sec">
+    <span class="lbl">口播声音</span>
+    <div class="voice-row">
+      <select id="voice-pick" class="voice-sel" aria-label="选择口播声音"></select>
+      <button class="chip" id="voice-try" type="button">试听</button>
+    </div>
+    <p class="src-note" id="voice-note"></p>
+  </div>
+
+  <div class="pf-sec">
     <span class="lbl">今日节目单</span>
     <div class="pf-list" id="pf-plan">
       <span class="pf-empty">今天还没有排期。</span>
@@ -148,9 +157,13 @@
      搬移而不是克隆：这样 els 里的引用和已绑定的监听器全都继续有效。 -->
 <div id="mini-host" hidden>
   <div class="mini substrate">
+    <!-- 封面压在底下当背景，压暗到不跟文字抢 -->
+    <div class="mini-art" id="mini-art"></div>
     <div class="mini-clock" id="mini-clock">--:--</div>
     <div class="mini-slot" id="mini-slot">&nbsp;</div>
     <div class="mini-np" id="mini-np">还没有在播的曲目</div>
+    <!-- 频谱。取自真实音频，不是定时动画 -->
+    <canvas class="mini-wave" id="mini-wave" width="240" height="28" aria-hidden="true"></canvas>
     <div class="mini-rail" id="mini-rail"><i id="mini-fill"></i></div>
     <div class="mini-tr">
       <button class="tbtn" id="mini-prev" aria-label="上一首">◀◀</button>

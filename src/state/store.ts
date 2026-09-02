@@ -177,6 +177,30 @@ export class Store {
     }));
   }
 
+  /**
+   * 最近一次有曲目的推荐，**跨会话**找。
+   *
+   * 前端每打开一次页面就换一个新会话，所以「上一场」不一定有歌 ——
+   * 中间夹一个开了就关的空会话，只回看一场就断链了。
+   * 播放器空着的页面看起来是死的，这个查询就是为了避免那件事。
+   */
+  lastQueue(): unknown | null {
+    const rows = this.db
+      .prepare(
+        `SELECT payload FROM messages
+         WHERE role = 'assistant' AND payload IS NOT NULL
+         ORDER BY id DESC LIMIT 20`,
+      )
+      .all() as Array<{ payload: string }>;
+    for (const r of rows) {
+      try {
+        const p = JSON.parse(r.payload);
+        if (p?.tracks?.length) return p;
+      } catch { /* 脏数据跳过 */ }
+    }
+    return null;
+  }
+
   /** 清空一个会话 —— 调语料时要频繁用，历史会污染新语料的效果判断 */
   clearSession(session: string): void {
     this.db.prepare("DELETE FROM messages WHERE session = ?").run(session);

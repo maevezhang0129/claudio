@@ -464,6 +464,21 @@ body {
 .pf-empty { font-size: 13px; color: var(--ash); }
 .src-note { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: var(--ash); opacity: .7; margin: 0; }
 
+/* 声音选择器 —— 仪器上的一个旋钮，不是一个网页表单 */
+.voice-row { display: flex; gap: calc(var(--pitch) * 2); align-items: center; }
+.voice-sel {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: calc(var(--pitch) * 1.5) calc(var(--pitch) * 2);
+}
+.voice-sel:focus { outline: none; border-color: var(--ash); }
+
 /* 今日节目单 —— 一档一行，读起来像排在墙上的班表 */
 .plan-row {
   border-left: 1px solid var(--line);
@@ -490,6 +505,7 @@ body {
    设计语言不变：最大的元素仍然是不承担交互的点阵时钟，
    绿色仍然只表示「正在播」。窗口很小，所以只留时钟、在播曲目和走带。 */
 .mini {
+  position: relative;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -501,6 +517,29 @@ body {
   color: var(--ink);
   text-align: center;
 }
+/* 封面：铺满、压暗、去饱和。它是底噪不是主角 ——
+   最大的元素仍然是那块不承担交互的点阵时钟。 */
+.mini-art {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: .22;
+  filter: saturate(.6) blur(1px);
+  transition: opacity .4s, background-image .4s;
+  pointer-events: none;
+}
+.mini > *:not(.mini-art) { position: relative; z-index: 1; }
+
+/* 频谱条。画的是真实音频的频域数据，不是定时动画 —— 
+   两个音源都带 Access-Control-Allow-Origin，AnalyserNode 拿得到样本。 */
+.mini-wave {
+  width: 100%;
+  height: 28px;
+  display: block;
+  opacity: .9;
+}
+
 .mini-clock {
   font-family: var(--dot);
   font-weight: 700;

@@ -23,23 +23,53 @@ let duckTarget = null;
 let restoreTimer = null;
 
 /**
- * 挑一个中文声音。
+ * macOS 的「趣味语音」。Eddy / Flo / Grandma / Grandpa / Reed / Rocko /
+ * Sandy / Shelley 是 Ventura 起加进来的卡通声线，它们和正经播报声音
+ * 混在同一份列表里，而且按字母序排在最前面 ——
+ * 原来这里取「第一个中文语音」，于是每次都选中 Eddy。
+ * 深夜电台配一个卡通音，听起来当然像机器。
+ */
+const NOVELTY = /^(eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|bells|bubbles|jester|organ|superstar|trinoids|whisper|wobble|zarvox|boing|bad news|good news)\b/i;
+
+/** 苹果的高质量语音。装了才会出现，名字里带这些词 */
+const PREMIUM = /(siri|premium|enhanced|neural|增强|优质)/i;
+
+/**
+ * 给一个语音打分，越高越优先。
+ *
+ * 排序而不是写死某一个名字：每台机器装了什么不一样，
+ * 而且用户可以随时去系统设置里下载更好的声音，下载完这里要能自动用上。
+ */
+function score(v) {
+  let n = 0;
+  if (PREMIUM.test(v.name)) n += 100;   // 装了高质量语音就一定用它
+  if (NOVELTY.test(v.name)) n -= 50;    // 卡通音排到最后
+  if (v.lang === "zh-CN") n += 10;      // 简体优先于繁体/粤语
+  else if (v.lang?.startsWith("zh")) n += 5;
+  if (v.default) n += 1;
+  return n;
+}
+
+/** 所有中文语音，按推荐程度排好 —— 界面上的选择器直接用这个顺序 */
+export function chineseVoices() {
+  if (!("speechSynthesis" in window)) return [];
+  return speechSynthesis.getVoices()
+    .filter((v) => v.lang && v.lang.toLowerCase().startsWith("zh"))
+    .sort((a, b) => score(b) - score(a));
+}
+
+/**
+ * 选一个中文声音。
  * getVoices() 在部分浏览器上首次调用返回空数组，要等 voiceschanged，
  * 所以这里做成幂等的，可以反复调。
  */
 function pickVoice() {
-  if (!("speechSynthesis" in window)) return null;
-  const all = speechSynthesis.getVoices();
+  const all = chineseVoices();
   if (!all.length) return null;
-
-  // 优先简体中文；退而求其次任何中文；再退到系统默认
-  return (
-    all.find((v) => v.lang === "zh-CN") ??
-    all.find((v) => v.lang?.startsWith("zh")) ??
-    all.find((v) => v.default) ??
-    all[0] ??
-    null
-  );
+  // 用户明确选过的优先，其次才是评分最高的
+  let saved = null;
+  try { saved = localStorage.getItem("claudio.voice"); } catch { /* 隐私模式 */ }
+  return all.find((v) => v.name === saved) ?? all[0];
 }
 
 export const tts = {
@@ -57,6 +87,30 @@ export const tts = {
    */
   attach(audioEl) {
     duckTarget = audioEl;
+  },
+
+  /** 当前用的声音名，界面上要显示 */
+  get voiceName() {
+    return voice?.name ?? null;
+  },
+
+  /** 换一个声音并记住。传 null 表示回到自动挑选。 */
+  setVoice(name) {
+    try {
+      if (name) localStorage.setItem("claudio.voice", name);
+      else localStorage.removeItem("claudio.voice");
+    } catch { /* 隐私模式下记不住，但本次仍然生效 */ }
+    voice = pickVoice();
+  },
+
+  /** 试听一句，用来比较不同声音 */
+  preview(line = "深夜十一点，给你四首。") {
+    if (!this.supported) return;
+    const u = new SpeechSynthesisUtterance(line);
+    if (voice) { u.voice = voice; u.lang = voice.lang; }
+    u.rate = 0.95;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
   },
 
   init() {

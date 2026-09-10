@@ -206,6 +206,43 @@ turn and gives the model two sources that can disagree.
 `prefs` goes in the volatile group. It is re-derived and hand-edited, and a few
 hundred tokens never justify invalidating the cached prefix.
 
+### External data never reaches a CSS string
+
+Album art URLs come from the music APIs. They were interpolated into a
+`url("...")` value for the floating panel's backdrop, which hands external text to
+the style parser. The same field was already escaped where it goes into DIDL XML
+in `upnp.ts` — CSS was simply missed.
+
+It is an `<img>` now, not a background. `img.src` does not pass through CSS at
+all, so the class of bug is gone rather than escaped around. Prefer that shape:
+if external data must reach the page, put it somewhere no parser reads as code.
+
+### A dead storefront must announce itself
+
+`ITunesProvider.health()` asks for a word any region should match. Zero results
+means the region is unusable, not that the song is missing — on 2026-09-11 the CN
+storefront returned zero for every query, English included, while TW/HK/US/JP
+answered normally and the HTTP status stayed 200. Silent failure like that turns
+`mixed` into NetEase-only without a word on screen, so the default storefront is
+TW and the banner reports both halves separately.
+
+`npm run verify` probes the storefront before its catalogue-dependent assertions
+and exits naming the region if it is dead. Reporting an environment outage as four
+assertion failures sends the next person to read matching code that is fine.
+
+Its fixtures must not encode one catalogue's contents either. A fabricated title
+has to be one no region carries — "Whispers Beneath the Tide" is a real ambient
+upload in TW — and order is asserted by original index, never by comparing title
+strings, because TW and HK answer in traditional characters and `normalize()`
+does not convert between them.
+
+### "Repeatedly skipped" means on more than one day
+
+`outcomeStats()` counts distinct days per artist, not rows. Clicking through four
+tracks at two seconds each is one action, not four judgements, and counting rows
+let a single burst crown an artist on the negative-feedback list — it briefly
+advised avoiding keshi and 方大同, the two most replayed artists in the library.
+
 ### The server is LAN-exposed, so static serving is security-relevant
 
 `app.listen` binds `0.0.0.0` on purpose — reaching it from a phone is the point.

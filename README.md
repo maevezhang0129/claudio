@@ -525,7 +525,11 @@ needed a schema migration to get there.
 - Prompt caching needs a stable prefix above the model's minimum (2048 tokens on
   Haiku). A thin corpus silently won't cache — `cacheReadTokens` stays at 0. Write
   more and it starts working.
-- The iTunes Search API is public but carries no SLA and no documented rate limits.
+- The iTunes Search API is public but carries no SLA and no documented rate
+  limits, and a storefront can go dark without saying so: on 2026-09-11 `CN`
+  returned zero results for every query while `TW`/`HK`/`US`/`JP` answered
+  normally, HTTP 200 throughout. The default is `TW`, and the startup banner
+  reports each half of `mixed` separately so this cannot fail quietly again.
 - Local-only. `npm run certs` fixes the secure-context problem on the LAN, but
   the certificate is bound to an IP — change Wi-Fi and you re-run it. A phone
   also has to trust the mkcert root CA separately (AirDrop `rootCA.pem`, install
@@ -1005,7 +1009,10 @@ DIDL-Lite 元数据一起带过去，这样电视屏幕上显示的是曲名和�
 - 繁简差异靠相似度阈值（0.72）兜，不是字表转换，极端情况可能误判。
 - prompt 缓存要求稳定前缀超过模型门槛（Haiku 是 2048 token）。语料太薄不会报错，
   只是静默地不缓存，`cacheReadTokens` 一直是 0。写厚了就会自动生效。
-- iTunes Search API 是公开接口，但无 SLA、无速率限制文档。
+- iTunes Search API 是公开接口，无 SLA、无速率限制文档，而且**一个区可以
+  悄无声息地死掉**：2026-09-11 实测 `CN` 区对任何查询返回 0 条（英文也一样），
+  同一秒 `TW`/`HK`/`US`/`JP` 全部正常，HTTP 状态一直是 200。
+  默认已改成 `TW`，启动横幅分别报 `mixed` 的两半，不会再静默失效。
 - 仅本地运行。`npm run certs` 解决了局域网的安全上下文问题，但证书绑定 IP ——
   换了 WiFi 就得重跑。手机还要单独信任 mkcert 的根证书
   （AirDrop 传 `rootCA.pem` → 安装描述文件 → 证书信任设置里打开）。

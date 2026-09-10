@@ -47,7 +47,12 @@ class StubBrain implements BrainAdapter {
           { title: "海阔天空", artist: "Beyond" },
           { title: "起风了", artist: "买辣椒也用券" },       // 跨平台艺名不一致
           { title: "永夜的第七章序曲", artist: "陈奕迅" },   // 编的
-          { title: "Whispers Beneath the Tide", artist: "Beyond" }, // 编的
+          // 编的。原来这里是 "Whispers Beneath the Tide" —— 但那个名字在
+          // TW 区**真的存在**（一支 AI 生成的氛围曲上传），于是过滤器正确地
+          // 把它判成 alternate，断言却因此变红。样本本身错了，不是代码错了。
+          // 换成一个任何曲库都不会有的：真艺人 + 长到不可能撞名的曲名，
+          // 这也正是模型真实的编造方式。
+          { title: "北纬四十三度的沉默练习曲", artist: "Beyond" },
         ],
       },
     };
@@ -55,7 +60,29 @@ class StubBrain implements BrainAdapter {
 }
 
 const store = new Store(TMP_DB);
-const music = createMusicProvider({ name: "itunes", itunesStorefront: "CN" });
+// 固定用 itunes，不跟着 config 走 mixed —— verify 不该依赖自建的网易云服务。
+// 但 storefront 跟着配置走：写死一个区，那个区哪天挂了，
+// 这里会报一串看不懂的断言失败，而真正的原因在几千公里外。
+const music = createMusicProvider({
+  name: "itunes",
+  itunesStorefront: config.itunesStorefront,
+});
+
+// 先探一次。曲库不可用时下面那些断言必然全红，但那不是代码的错 ——
+// 把「环境坏了」报成「代码坏了」，会让人往完全错误的方向查。
+// 实测过一次：CN 区对任何查询返回 0 条，而同一秒 TW/HK/US 都正常。
+const health = await music.health!();
+if (!health.ok) {
+  console.error(`
+  曲库不可用，无法验证幻觉过滤 —— 这不是代码回归。
+
+    ${health.detail}
+
+  换一个区再跑：CLAUDIO_ITUNES_STOREFRONT=TW npm run verify
+`);
+  process.exit(1);
+}
+console.log(`音源    ${health.detail}`);
 const brain = new StubBrain();
 
 // ---- 第 1 轮 ----
@@ -87,9 +114,16 @@ console.log(`解析    保留 ${tracks1.length} 首 / 丢弃 ${dropped1} 首`);
 const MAX_ALTERNATES = 1;
 const exactOnly: Track[] = [];
 const altOnly: Track[] = [];
-for (const r of resolved1) {
+/** exact 曲目在模型原始 play[] 里的下标，用来验证顺序没被打乱 */
+const exactOrigin: number[] = [];
+for (const [i, r] of resolved1.entries()) {
   if (!r) continue;
-  (r.confidence === "exact" ? exactOnly : altOnly).push(r.track);
+  if (r.confidence === "exact") {
+    exactOnly.push(r.track);
+    exactOrigin.push(i);
+  } else {
+    altOnly.push(r.track);
+  }
 }
 const keptAlt = altOnly.slice(0, MAX_ALTERNATES);
 const trimmed = altOnly.length - keptAlt.length;
@@ -310,13 +344,12 @@ const checks: [string, boolean][] = [
   // 硬编码 title 会因为曲库变动而假失败 —— Apple Music 的
   //「海阔天空」首位结果一度变成《海阔天空 (大马版28/05/93) [Live]》，
   // 匹配逻辑正确判定为 exact，但返回的 title 带上了现场版修饰。
-  ["exact 保持模型原始顺序", (() => {
-    const wanted = r1.response.play
-      .map((q) => normalize(q.title))
-      .filter((t) => exactOnly.some((e) => normalize(e.title) === t));
-    const got = exactOnly.map((e) => normalize(e.title));
-    return wanted.length === got.length && wanted.every((t, i) => t === got[i]);
-  })()],
+  // 比**下标**，不比曲名。曾经这里拿归一化后的曲名去和模型的原始请求对应，
+  // 换个 storefront 就红：TW/HK 返回繁体（海闊天空），而 normalize 不做
+  // 简繁转换 —— 那是文档里写明的已知边界，靠相似度兜，不靠字符串相等。
+  // 要验证的本来就是「顺序」，下标是它唯一不掺杂质的表达。
+  ["exact 保持模型原始顺序",
+    exactOrigin.every((v, i) => i === 0 || v > exactOrigin[i - 1]!)],
   // 模板里的 <!-- --> 是写给用户看的填写指引。漏进 prompt 的话，
   // 模型会把「✗ 没用：喜欢周杰伦」这种示范当成用户的真实偏好。
   ["语料剥离了模板指引注释",

@@ -462,10 +462,22 @@ export class Store {
         .prepare("SELECT COUNT(*) AS n FROM plays WHERE outcome = ?")
         .get(outcome) as { n: number }).n;
 
+    /**
+     * 按艺人聚合，但**同一天只算一次**。
+     *
+     * 一口气点过去四首、每首两秒，是一次操作，不是四次判断 ——
+     * 调试时如此，真人快速翻队列时也如此。按次数算的话，
+     * 一次这样的操作就能把一个艺人推上「反复被切掉」的榜首，
+     * 而那份榜单会直接告诉 DJ「别再往那儿推」。
+     * 实测踩过：它一度建议避开 keshi 和方大同 —— 恰恰是复听最狠的两位。
+     *
+     * 「反复」在时间上的含义是「不止一天还这样」，所以按天去重。
+     */
     const byArtist = (outcome: string) =>
       this.db
         .prepare(
-          `SELECT artist, COUNT(*) AS n FROM plays WHERE outcome = ?
+          `SELECT artist, COUNT(DISTINCT date(played_at / 1000, 'unixepoch', 'localtime')) AS n
+           FROM plays WHERE outcome = ?
            GROUP BY artist ORDER BY n DESC, artist ASC LIMIT 8`,
         )
         .all(outcome) as Array<{ artist: string; n: number }>;

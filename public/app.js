@@ -291,7 +291,16 @@ function setNowPlaying(t) {
   paint(els.npTitle);
   paint(els.miniNp);
   if (els.miniArt) {
-    els.miniArt.style.backgroundImage = t.artworkUrl ? `url("${t.artworkUrl}")` : "";
+    // 赋 src，不拼 CSS。这个地址来自音源接口，是外部数据 ——
+    // 拼进 `url("...")` 里，一个带引号的地址就能往样式表里塞任意声明。
+    // 同一个字段在 upnp.ts 拼 DIDL 时是过了 esc() 的，这里当初漏了。
+    if (t.artworkUrl) {
+      els.miniArt.src = t.artworkUrl;
+      els.miniArt.hidden = false;
+    } else {
+      els.miniArt.removeAttribute("src");   // 置空会让浏览器去请求当前页面
+      els.miniArt.hidden = true;
+    }
   }
 }
 
@@ -428,6 +437,9 @@ els.audio.addEventListener("error", async () => {
   // ① 同一首只换一次地址，避免坏歌把自己卡在死循环里
   if (refreshedFor !== t.providerId) {
     refreshedFor = t.providerId;
+    // 换链要重走一次曲库解析，可能几秒。不说一声的话，
+    // 这几秒里按了播放却毫无动静，看着就像按坏了。
+    setStatus("busy", "正在换取播放地址…");
     try {
       const q = new URLSearchParams({ title: t.title, artist: t.artist });
       const { url } = await api(`/api/stream?${q}`);
@@ -435,11 +447,13 @@ els.audio.addEventListener("error", async () => {
         if (t.fullPlayback) t.fullPlayback.ref = url; else t.previewUrl = url;
         els.audio.src = url;
         els.audio.play().catch(() => {});
+        paintStatus();
         return;
       }
     } catch {
       // 换不到就往下走 ②
     }
+    paintStatus();
   }
 
   // ② 退掉 crossOrigin 再试一次

@@ -157,8 +157,11 @@
      搬移而不是克隆：这样 els 里的引用和已绑定的监听器全都继续有效。 -->
 <div id="mini-host" hidden>
   <div class="mini substrate">
-    <!-- 封面压在底下当背景，压暗到不跟文字抢 -->
-    <div class="mini-art" id="mini-art"></div>
+    <!-- 封面压在底下当背景，压暗到不跟文字抢。
+         用 <img> 而不是 CSS background-image：地址来自音源接口，
+         拼进 CSS 字符串就等于把外部数据交给样式解析器。
+         img.src 根本不经过 CSS，整类注入不存在。 -->
+    <img class="mini-art" id="mini-art" alt="" hidden>
     <div class="mini-clock" id="mini-clock">--:--</div>
     <div class="mini-slot" id="mini-slot">&nbsp;</div>
     <div class="mini-np" id="mini-np">还没有在播的曲目</div>

@@ -42,7 +42,19 @@ export const config = {
    */
   musicProvider: (process.env.CLAUDIO_MUSIC_PROVIDER ?? "mixed") as
     | "itunes" | "applemusic" | "netease" | "mixed",
-  itunesStorefront: process.env.CLAUDIO_ITUNES_STOREFRONT ?? "CN",
+  /**
+   * iTunes storefront。默认 TW 而不是 CN。
+   *
+   * 2026-09-11 实测：CN 区对**任何**查询返回 0 条，英文中文都一样，
+   * 而同一秒 TW / HK / US / JP 全部正常，接口还是 200 —— 没有任何报错。
+   * 默认指着一个死掉的区，会让 mixed 的 iTunes 那半边静默失效，
+   * 推荐全部悄悄改由网易云出，而界面上什么都不说。
+   *
+   * TW 是华语曲目最接近的替代（陳奕迅、Beyond 都在）。代价是曲名返回繁体，
+   * 靠 0.72 的相似度阈值兜 —— 「告白气球 ↔ 告白氣球」是 0.750，verify 钉着它。
+   * CN 哪天活过来，把这个值改回去即可，启动横幅会告诉你哪个区能用。
+   */
+  itunesStorefront: process.env.CLAUDIO_ITUNES_STOREFRONT ?? "TW",
 
   /** 自建 NeteaseCloudMusicApi 的地址。npm run netease:api 起在 3000 */
   neteaseBaseUrl: process.env.CLAUDIO_NETEASE_BASE_URL ?? "http://localhost:3000",

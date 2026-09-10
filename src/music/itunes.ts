@@ -198,6 +198,32 @@ export class ITunesProvider implements MusicProvider {
     }
   }
 
+  /**
+   * 这个 storefront 还活着吗。
+   *
+   * 实测过一次真事：CN 区对**所有**查询返回 0 条（英文中文都一样），
+   * 而同一秒 TW/HK/US 正常。接口本身 200，没有任何错误提示 ——
+   * 于是 mixed 的 iTunes 那半边静默失效，推荐全部悄悄改由网易云出，
+   * 而横幅上什么都不说。这个探测就是为了让那种失效说出话来。
+   */
+  async health(): Promise<{ ok: boolean; detail: string }> {
+    try {
+      // 用一个在任何区都该有结果的词，返回 0 条就说明这个区不可用，
+      // 而不是「这首歌没有」
+      const hit = await this.query("music", 1);
+      return hit.length
+        ? { ok: true, detail: `storefront ${this.storefront} 正常` }
+        : {
+            ok: false,
+            detail:
+              `storefront ${this.storefront} 对任何查询都返回 0 条 —— ` +
+              "这个区不可用，换一个：CLAUDIO_ITUNES_STOREFRONT=TW",
+          };
+    } catch {
+      return { ok: false, detail: `连不上 iTunes Search API` };
+    }
+  }
+
   async search(term: string, limit = 10): Promise<Track[]> {
     let raw: ITunesResult[];
     try {

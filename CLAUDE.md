@@ -243,6 +243,21 @@ tracks at two seconds each is one action, not four judgements, and counting rows
 let a single burst crown an artist on the negative-feedback list — it briefly
 advised avoiding keshi and 方大同, the two most replayed artists in the library.
 
+### The profile shows what is missing, it does not fill it in
+
+Three sections come straight from the split that runs through this project:
+"听什么" and "不听什么" read `taste.md`, which only the owner can write, and
+"会反复回去听的" reads the loop chart `library.md` computes. Arithmetic can say a
+track was replayed 77 times; it cannot say why, or when not to play it.
+
+When a `taste.md` section is empty the view says so and names the file, rather
+than rendering nothing or inventing content. Blank space reads as a broken
+feature; a sentence saying whose job it is turns the gap into an entry point.
+
+HTML comments are stripped before deciding emptiness, the same as in
+`userCorpus()` — a section holding only its `<!-- 待填 -->` template guidance is
+empty, and rendering that guidance would make it look already written.
+
 ### The server is LAN-exposed, so static serving is security-relevant
 
 `app.listen` binds `0.0.0.0` on purpose — reaching it from a phone is the point.

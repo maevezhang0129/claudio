@@ -14,6 +14,7 @@ import { assemble } from "./context/assemble.ts";
 import { currentSlot, parseRoutines } from "./context/routines.ts";
 import { currentWeather } from "./context/weather.ts";
 import { countFresh, familiarArtists } from "./context/library.ts";
+import { profileCorpus } from "./context/profile.ts";
 import { todayCalendar } from "./context/calendar.ts";
 import { createBrain } from "./brain/index.ts";
 import { createMusicProvider } from "./music/index.ts";
@@ -301,6 +302,9 @@ app.get("/api/now", async () => {
 
 /** 资料页：语料 + 从 plays 表算出来的数字 */
 app.get("/api/profile", async () => {
+  // 设计稿上的三块：听什么 / 不听什么 / 会反复回去听的。
+  // 前两块只有本人写得出来，空着就如实返回 null —— 界面上会把它变成入口。
+  const corpus = await profileCorpus(config.rootDir);
   const { played, peakHour } = store.stats();
   let routines = 0;
   try {
@@ -310,7 +314,7 @@ app.get("/api/profile", async () => {
   } catch {
     // 语料不存在
   }
-  return { played, peakHour, routines };
+  return { played, peakHour, routines, ...corpus };
 });
 
 /**

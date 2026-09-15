@@ -30,6 +30,7 @@ const els = {
   miniPrev: $("mini-prev"), miniToggle: $("mini-toggle"), miniNext: $("mini-next"),
   viewRadio: $("view-radio"), viewProfile: $("view-profile"),
   brand: $("brand"), back: $("back"), reset: $("reset"), mic: $("mic"),
+  pfLikes: $("pf-likes"), pfDislikes: $("pf-dislikes"), pfAnchors: $("pf-anchors"),
   voicePick: $("voice-pick"), voiceTry: $("voice-try"), voiceNote: $("voice-note"),
   sPlayed: $("s-played"), sPeak: $("s-peak"), sRoutines: $("s-routines"),
   pfRecent: $("pf-recent"), pfPlan: $("pf-plan"), planBuild: $("plan-build"),
@@ -915,11 +916,56 @@ function initVoices() {
       "下载完刷新页面就会出现在这里。";
 }
 
+/**
+ * 「听什么 / 不听什么」两栏。
+ *
+ * 数据源是 taste.md 里那两节，只有本人写得出来。没写的时候**不编** ——
+ * 如实说这一栏归谁，并告诉他写在哪。空白看着像功能坏了，
+ * 一句「只有你能写」才把缺失变成入口。
+ */
+function paintTaste(node, text, hint) {
+  if (!node) return;
+  if (text) {
+    node.replaceChildren(Object.assign(el("p", "pf-prose"), { textContent: text }));
+    return;
+  }
+  const p = el("p", "pf-todo");
+  p.append(document.createTextNode(hint + "写在 "));
+  p.append(Object.assign(el("code"), { textContent: "user/taste.md" }));
+  p.append(document.createTextNode(" 里，这一栏就会显示它。"));
+  node.replaceChildren(p);
+}
+
+/** 循环榜 —— 算得出来的那一栏，和上面两栏正好互补 */
+function paintAnchors(list) {
+  if (!els.pfAnchors) return;
+  if (!list?.length) {
+    els.pfAnchors.replaceChildren(
+      el("span", "pf-empty", "曲库画像还没生成，跑 npm run ingest。"));
+    return;
+  }
+  els.pfAnchors.replaceChildren(...list.map((a, i) => {
+    const row = el("div", "anchor-row");
+    row.append(el("span", "idx", String(i + 1).padStart(2, "0")));
+    const body = el("span");
+    body.append(document.createTextNode(a.title));
+    body.append(Object.assign(el("span", "who"), { textContent: ` — ${a.artist}` }));
+    row.append(body);
+    row.append(el("span", "n", `${a.plays}×`));
+    return row;
+  }));
+}
+
 async function loadProfile() {
   initVoices();
   loadPlan();
   try {
     const p = await api("/api/profile");
+    paintTaste(els.pfLikes, p.likes,
+      "长期偏好只有你知道 —— 算术看得见你循环了多少次，看不见为什么。");
+    paintTaste(els.pfDislikes, p.dislikes,
+      "排除比包含更能定义一个人，而这一条谁也替你写不了。");
+    paintAnchors(p.anchors);
     els.sPlayed.textContent = p.played.toLocaleString();
     els.sPeak.textContent = p.peakHour == null ? "—" : `${String(p.peakHour).padStart(2, "0")}:00`;
     els.sRoutines.textContent = String(p.routines);

@@ -464,6 +464,57 @@ body {
 .pf-empty { font-size: 13px; color: var(--ash); }
 .src-note { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: var(--ash); opacity: .7; margin: 0; }
 
+/* 语料正文。用户自己写的散文，原样排版 —— 切成标签会把
+   「喜欢他 2005 前后的编曲密度」这种句子剁碎，而句子才是有用的那部分。 */
+.pf-prose {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* 还没写的那一栏。不留空 —— 空白看着像坏了，
+   写清楚「只有你能写」才是把缺失变成入口。 */
+.pf-todo {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ash);
+  border-left: 1px solid var(--line);
+  padding-left: calc(var(--pitch) * 2);
+  margin: 0;
+}
+.pf-todo code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+/* 锚点榜 —— 编号 + 曲目 + 次数，和队列同一套读法 */
+.anchor-row {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--pitch) * 2);
+  font-size: 13px;
+}
+.anchor-row .idx {
+  font-family: var(--dot);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--ash);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.anchor-row .who { color: var(--ash); }
+.anchor-row .n {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: var(--ash);
+  flex: none;
+}
+
 /* 声音选择器 —— 仪器上的一个旋钮，不是一个网页表单 */
 .voice-row { display: flex; gap: calc(var(--pitch) * 2); align-items: center; }
 .voice-sel {

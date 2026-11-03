@@ -1,5 +1,19 @@
 # Design
 
+## `stage.jpg`
+
+The wide-screen stage as built (1440×900), used at the top of the main README.
+The queue is sample content injected in the browser, so the owner's real listening
+history never reaches a public image. The photo is one of the Unsplash scenes in
+`public/scenes/`.
+
+The stage takes its look from playlist-video covers (a café photo, a big title,
+the queue in small caps), not from the mockup below. It is a second visual world
+for a different situation: a screen left running beside the desk, where the phone
+layout's instrument panel would be a 640px column floating in empty space. The
+mockup's rules still hold where they apply: green appears only on the status light,
+and alternates are marked rather than passed off as the requested artist.
+
 ## `mockup.html`
 
 The visual direction for Claudio's interface, before it was built. Open it in a

@@ -7,6 +7,13 @@ to you like a late-night DJ.
 Not a recommendation algorithm — a prompt assembler plus a thin layer of API glue.
 All the intelligence lives in the corpus you write; the code just keeps it honest.
 
+![Claudio on a laptop: a café photo behind "PLAYLIST Wednesday" in large type, the current album cover beside the date and time, and the queue as small-caps artist and title pairs](design/stage.jpg)
+
+*On a computer or a tablet held sideways, Claudio runs as an ambient screen. The photo
+changes with every song, a day set or a night set, and the controls only appear when
+you move the mouse or tap. Phones get a compact player-and-chat layout instead.
+Sample queue; photos from Unsplash.*
+
 **Status: stage ③ complete — a mixed music source, a schedule that fires on its own, spoken announcements, and casting to a DLNA device.**
 
 [中文说明见下方](#claudio-中文说明)
@@ -568,6 +575,12 @@ needed a schema migration to get there.
 
 它不是推荐算法，而是**一个 prompt 组装器加一层薄薄的 API 胶水**。全部智能都在
 你自己写的语料里，代码只负责让它保持诚实。
+
+![Claudio 在笔记本上的样子：咖啡馆照片上是大字「PLAYLIST Wednesday」，右上角是当前专辑封面和日期时间，歌单用小型大写排成两行](design/stage.jpg)
+
+*在电脑或横放的平板上，Claudio 是一块放在一边的氛围屏：每首歌换一张照片，白天、晚上各一组；
+操作栏动一下鼠标或点一下屏幕才出现。手机上是紧凑的播放器加对话界面。
+图中是示例歌单，照片来自 Unsplash。*
 
 **当前状态：阶段③ 完成 —— 混合音源、会自己到点换档的排期、语音播报、投到 DLNA 设备外放。**
 

@@ -110,7 +110,17 @@ export class MixedProvider implements MusicProvider {
           .catch(() => null);
 
     const best = this.better(itDirect, itCanon);
-    if (best) return this.merge(best, ne);
+    if (best) {
+      // 网易云的整曲只能接到同一个录音上。网易云判为 exact，说明它找到的
+      // 就是模型要的那首；iTunes 按网易云给的名字精确命中，说明两边说的是
+      // 同一个录音。除此之外 —— 网易云只找到别人的版本，而 iTunes 的结果
+      // 来自原始 query —— 两边是两个录音，拼起来就是界面写着原唱、
+      // 播放器放着翻唱（整曲优先于试听）。那时 iTunes 的答案原样就是对的。
+      const sameRecording =
+        ne.confidence === "exact" ||
+        (best === itCanon && best.confidence === "exact");
+      return sameRecording ? this.merge(best, ne) : this.rebrand(best);
+    }
 
     // iTunes 两条路都没有音源，但网易云认得这首歌。仍然返回 ——
     // 它不是幻觉，只是听不了，前端会给一个跳转外部的入口。

@@ -42,7 +42,12 @@ Four layers. Two of them are pluggable adapters; keep them that way.
   implemented; `applemusic` is a declared case that throws with an explanation.
   `mixed` composes the other two and must stay that way: iTunes answers first and
   NetEase is only a second opinion, so `mixed` can never score worse than iTunes.
-  Reversing that order made it worse — see the README.
+  Reversing that order made it worse — see the README. NetEase's full-track link
+  is only attached to the **same recording**: once, an exact iTunes match for
+  宇多田光's "First Love" got the full track of a NetEase-only cover spliced in,
+  and full tracks play before previews, so the screen named the original while
+  the speakers played the cover. `npm run verify` pins this case with fake
+  providers.
 - **`BrainAdapter`** (`src/brain/types.ts`) — `claude` and `stub`; adding GLM /
   DeepSeek / Kimi means one new implementation plus a case in
   `src/brain/index.ts`. Nothing above the factory changes.

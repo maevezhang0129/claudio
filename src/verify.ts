@@ -15,7 +15,8 @@ import { Store } from "./state/store.ts";
 import type { BrainAdapter, BrainRequest, BrainResult } from "./brain/types.ts";
 import { config } from "./config.ts";
 import { lengthRatio, normalize, similarity } from "./music/normalize.ts";
-import type { Track } from "./music/types.ts";
+import type { ResolveResult, Track, TrackQuery } from "./music/types.ts";
+import { MixedProvider } from "./music/mixed.ts";
 import { countFresh, familiarArtists } from "./context/library.ts";
 
 const TMP_DB = path.join(config.rootDir, "data", "_test.db");
@@ -274,6 +275,70 @@ for (const [artist, wantFresh] of freshCases) {
 }
 console.log(`  （从 library.md 认出 ${familiar.size} 位艺人）`);
 
+// ---- mixed 合并 ----
+// 网易云的整曲只能接到**同一个录音**上。曾经 iTunes 精确命中宇多田光的
+// First Love、网易云只找到一个翻唱，合并后界面写着宇多田光，
+// 播放器却优先放了翻唱的整曲 —— 显示的和听到的是两个人。
+// 用两个假的 provider 钉住，不依赖任何曲库的当下内容。
+console.log("\n── mixed 合并 ──");
+function rec(artist: string, title: string, full?: string): Track {
+  const t: Track = {
+    provider: "itunes", providerId: `${artist}/${title}`, title, artist,
+    previewUrl: `preview:${artist}`,
+  };
+  if (full) t.fullPlayback = { kind: "url", ref: full };
+  return t;
+}
+function fakeMixed(
+  itunes: (q: TrackQuery) => ResolveResult | null,
+  netease: ResolveResult,
+): MixedProvider {
+  const m = new MixedProvider();
+  // 私有字段只在类型层面私有，运行时换得掉
+  const inner = m as unknown as Record<string, unknown>;
+  inner.itunes = { resolve: async (q: TrackQuery) => itunes(q) };
+  inner.netease = { resolve: async () => netease };
+  inner.capabilities = { preview: true, fullPlayback: true, userLibrary: false };
+  return m;
+}
+const ASKED = { title: "First Love", artist: "Utada" };
+const COVER_NOTE = "曲库里没有 Utada 的版本，这是 BUO粽 的";
+
+// ① iTunes 精确命中原唱，网易云只找到翻唱
+const coverOnly = await fakeMixed(
+  (q) => q.artist === "Utada"
+    ? { track: rec("Hikaru Utada", "First Love"), confidence: "exact" }
+    : null,
+  { track: rec("BUO粽", "First Love", "full:cover"), confidence: "alternate", note: COVER_NOTE },
+).resolve(ASKED);
+// ② 两边找到的都是原唱
+const bothOriginal = await fakeMixed(
+  () => ({ track: rec("Hikaru Utada", "First Love"), confidence: "exact" }),
+  { track: rec("Hikaru Utada", "First Love", "full:original"), confidence: "exact" },
+).resolve(ASKED);
+// ③ iTunes 按原名找不到，按网易云给的名字找到了**同一个**替代录音
+const sameCover = await fakeMixed(
+  (q) => q.artist === "BUO粽"
+    ? { track: rec("BUO粽", "First Love"), confidence: "exact" }
+    : null,
+  { track: rec("BUO粽", "First Love", "full:cover"), confidence: "alternate", note: COVER_NOTE },
+).resolve(ASKED);
+
+const mergeCases: [string, boolean][] = [
+  ["原唱 + 只有翻唱：不接翻唱的整曲", coverOnly?.track.fullPlayback === undefined],
+  ["原唱 + 只有翻唱：仍是 exact、显示原唱、不带替代说明",
+    coverOnly?.confidence === "exact" && coverOnly.track.artist === "Hikaru Utada" && !coverOnly.note],
+  ["两边都是原唱：接上网易云的整曲", bothOriginal?.track.fullPlayback?.ref === "full:original"],
+  ["按网易云的名字找到同一个替代录音：接整曲并标成替代",
+    sameCover?.track.fullPlayback?.ref === "full:cover" &&
+    sameCover.confidence === "alternate" && sameCover.note === COVER_NOTE],
+];
+let mergeFailed = 0;
+for (const [name, ok] of mergeCases) {
+  if (!ok) mergeFailed++;
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${name}`);
+}
+
 // ---- 断言 ----
 console.log("\n── 断言 ──");
 const checks: [string, boolean][] = [
@@ -368,6 +433,6 @@ rmSync(TMP_DB, { force: true });
 rmSync(TMP_DB + "-wal", { force: true });
 rmSync(TMP_DB + "-shm", { force: true });
 
-failed += altFailed + normFailed + freshFailed;
+failed += altFailed + normFailed + freshFailed + mergeFailed;
 console.log(failed === 0 ? "\n全部通过" : `\n${failed} 项失败`);
 process.exit(failed === 0 ? 0 : 1);

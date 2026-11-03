@@ -637,6 +637,8 @@ body {
   gap: var(--pitch);
   padding: var(--pitch) 0 0;
 }
+/* 上面的 display:flex 会压过 [hidden]，关掉面板后上一次的提示文字一直挂着 */
+.cast-panel[hidden] { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .eq.on i { animation: none; }

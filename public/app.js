@@ -9,6 +9,7 @@
  */
 
 import { tts, chineseVoices } from "./tts.js";
+import { createStage } from "./stage.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -61,6 +62,16 @@ const state = {
   segue: "",        // 本轮的过渡语，等整组播完再念
   onAirSlot: null,  // 当前正在播出的档名，用来识别换档
 };
+
+/**
+ * 大屏播放画面（stage.js）。窄屏时它什么都不显示，下面这些调用照样发生、
+ * 只是画在一块看不见的画面上 —— 这样转一下平板就能直接切过去，不用补状态。
+ */
+const stage = createStage({
+  onPlay: (i) => play(i),
+  onProfile: () => showProfile(true),
+  keepAwake: () => state.busy,   // DJ 在想的时候操作栏不退下
+});
 
 // ─────────────────────────────── 工具
 
@@ -117,6 +128,7 @@ async function syncClock() {
     state.clockOffset = epoch - Date.now();
     els.slot.textContent = slot.name;
     if (els.miniSlot) els.miniSlot.textContent = slot.name;
+    stage.setSlot(slot.name);
     // 场景名来自用户语料时才标注来源 —— 兜底时段不值得声张
     els.slotSrc.textContent =
       slot.source === "routines.md" ? `场景取自 routines.md · ${slot.range ?? ""}` : "";
@@ -163,6 +175,10 @@ function addSlotNotice(slot, plan) {
   row.append(btn);
   els.feed.append(row);
   scroll();
+  stage.say(`${slot} 开播 · ${plan.tracks.length} 首`, {
+    kind: "notice",
+    action: { label: "载入这一档", run: () => loadQueue(plan.tracks) },
+  });
 }
 
 const WEEK = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
@@ -176,6 +192,7 @@ function tickClock() {
   els.clockDate.textContent =
     `${WEEK[d.getDay()]} · ${pad(d.getDate())}-${MON[d.getMonth()]}-${d.getFullYear()}`;
   if (els.miniClock) els.miniClock.textContent = hhmm;
+  stage.tick(d);
 }
 
 // ─────────────────────────────── 收听上报
@@ -291,6 +308,7 @@ function setNowPlaying(t) {
   );
   paint(els.npTitle);
   paint(els.miniNp);
+  stage.setTrack(t);
   if (els.miniArt) {
     // 赋 src，不拼 CSS。这个地址来自音源接口，是外部数据 ——
     // 拼进 `url("...")` 里，一个带引号的地址就能往样式表里塞任意声明。
@@ -334,6 +352,7 @@ function renderQueue() {
     row.onclick = () => play(i);
     els.queue.append(row);
   });
+  stage.setQueue(state.queue, state.index);
 }
 
 function ruleRow(text, warn) {
@@ -385,6 +404,7 @@ function syncTransport() {
   const noNext = state.queue.length === 0 || state.index >= state.queue.length - 1;
   els.toggle.textContent = playing ? "❚❚" : "▶";
   els.eq.classList.toggle("on", playing);
+  stage.setPlaying(playing);
   els.prev.disabled = noPrev;
   els.next.disabled = noNext;
   if (els.miniToggle) {
@@ -520,11 +540,14 @@ function ensureAnalyser() {
 }
 
 function drawWave() {
-  const cv = els.miniWave;
-  if (!cv || !analyser) return;
-  const g = cv.getContext("2d");
+  if (!analyser) return;
   const bins = new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteFrequencyData(bins);
+  stage.paintWave(bins);
+
+  const cv = els.miniWave;
+  if (!cv) return;
+  const g = cv.getContext("2d");
 
   const w = cv.width, h = cv.height;
   g.clearRect(0, 0, w, h);
@@ -548,6 +571,7 @@ function startWave() {
 function stopWave() {
   if (waveTimer) cancelAnimationFrame(waveTimer);
   waveTimer = null;
+  stage.paintWave(null);
   const cv = els.miniWave;
   if (cv) cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
 }
@@ -736,6 +760,7 @@ function addDJ(r, opts = {}) {
   els.feed.append(turn);
 
   if (opts.current) {
+    stage.say(r.say);
     loadQueue(r.tracks);
     state.segue = r.segue ?? "";
     tts.speak(r.say);   // 先说话，再放歌
@@ -792,6 +817,7 @@ async function ask(text) {
   setStatus("busy", "思考中");
   addUser(msg);
   els.input.value = "";
+  stage.say(`「${msg}」—— 在想放什么…`, { kind: "wait" });
 
   try {
     const data = await api("/api/chat", {
@@ -803,6 +829,7 @@ async function ask(text) {
   } catch (e) {
     addError(e.message, msg);
     setStatus("error", "出错了");
+    stage.say(e.message, { kind: "error", action: { label: "重试", run: () => ask(msg) } });
   } finally {
     state.busy = false;
     els.send.disabled = false;
@@ -839,6 +866,10 @@ async function restore() {
 function showProfile(on) {
   els.viewRadio.hidden = on;
   els.viewProfile.hidden = !on;
+  // 大屏上播放画面盖在最上层，资料页打开时要把它收起来（见 style.css）
+  document.body.classList.toggle("pf-open", on);
+  // 资料页开着时窗口可能变过大小，回来时按现在的尺寸重排一次歌单
+  if (!on) stage.refresh();
   if (on) loadProfile();
 }
 

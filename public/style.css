@@ -640,6 +640,365 @@ body {
 /* 上面的 display:flex 会压过 [hidden]，关掉面板后上一次的提示文字一直挂着 */
 .cast-panel[hidden] { display: none; }
 
+/* ═══ 大屏播放画面 ═══
+   电脑、横放的平板上，Claudio 是一块放在一边的氛围屏。
+   这里是另一个视觉世界：暖色照片、海报式大字，不是仪器面板。
+   绿色仍然只在状态灯上表示 live；当前曲目用金色，替代版本用压暗 + 标签，
+   不和手机界面里琥珀色「替代版本」的含义打架。
+
+   条件和 stage.js 里的 WIDE 是同一个，改一处必须改另一处。
+   窄屏下整块 display:none，手机界面一个像素都不变。 */
+.stage { display: none; }
+
+@media (min-width: 960px) and (orientation: landscape) {
+  :root {
+    --st-gold:  #E8D3A3;   /* 大字、日期 */
+    --st-cur:   #E2B76A;   /* 正在放的那首 */
+    --st-cream: #F6EFE2;   /* 正文 */
+    --st-ink:   rgba(18, 11, 6, .62);
+    --st-display: Futura, "Jost", "Trebuchet MS", var(--sans);
+    --st-caps:    Copperplate, "Cinzel", Georgia, var(--sans);
+    --st-x: 3.2vw;         /* 左右边距 */
+  }
+
+  body { max-width: none; }
+  body > header.bar { display: none; }
+  #view-radio { display: none; }
+
+  /* 资料页在大屏上仍是那一栏，居中放 */
+  #view-profile { width: 100%; max-width: 640px; margin: 0 auto; }
+  body.pf-open .stage { display: none; }
+
+  .stage {
+    display: block;
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: #1a1410;
+    color: var(--st-cream);
+    font-family: var(--sans);
+  }
+  .stage:not(.awake) { cursor: none; }
+
+  /* ── 背景照片：两层交替淡入 */
+  .st-photo {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    filter: brightness(.66) saturate(.92);
+    transition: opacity 1.4s ease, filter .5s ease;
+  }
+  .st-photo.on { opacity: 1; }
+  .stage.awake .st-photo { filter: brightness(.48) saturate(.85); }
+
+  /* 压暗层：左边压字、底部压操作栏、右上压日期。白天的照片很亮，不压就看不清字 */
+  .st-shade {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(90deg, var(--st-ink) 0%, rgba(18,11,6,.12) 46%, rgba(18,11,6,.40) 100%),
+      linear-gradient(0deg, rgba(18,11,6,.58) 0%, rgba(18,11,6,0) 42%),
+      radial-gradient(ellipse at 100% 0%, rgba(18,11,6,.45), rgba(18,11,6,0) 45%);
+  }
+
+  /* 海报式排版：每一块都按视口比例钉在自己的位置上 */
+  .stage > * { position: absolute; }
+  .stage { text-shadow: 0 1px 10px rgba(0, 0, 0, .35); }
+
+  /* ── 左上署名，点一下进资料页 */
+  .st-by {
+    top: 4.2vh; left: var(--st-x);
+    background: none; border: 0; padding: 0; cursor: pointer;
+    color: var(--st-cream);
+    font: 700 clamp(12px, 1.3vw, 20px) Georgia, "Times New Roman", serif;
+    letter-spacing: .14em;
+    text-shadow: inherit;
+  }
+  .st-by span { font-size: .78em; letter-spacing: .08em; margin-left: .5em; }
+  .st-by:hover span { text-decoration: underline; text-underline-offset: .25em; }
+  .st-by:focus-visible { outline: 2px solid var(--st-cur); outline-offset: 6px; }
+
+  /* ── 右上角「此刻」：封面 + 日期、时间、时段 */
+  .st-corner {
+    top: 2.6vh; right: var(--st-x);
+    display: flex; align-items: flex-start; gap: 2.2vw;
+    transition: opacity .35s;
+  }
+  .st-clock { text-align: right; }
+  .st-dd {
+    font: 800 min(14vh, 8.6vw)/.92 var(--st-display);
+    color: var(--st-gold);
+    letter-spacing: .12em;
+    margin-right: -.12em;   /* 抵消末尾字距，右边才对得齐 */
+    font-variant-numeric: tabular-nums;
+  }
+  .st-mon {
+    font: 800 min(7.4vh, 4.4vw)/1 var(--st-display);
+    letter-spacing: .38em;
+    margin-right: -.38em;
+  }
+  .st-time {
+    margin-top: 2.4vh;
+    font: 700 min(3vh, 1.8vw)/1 var(--st-display);
+    color: var(--st-gold);
+    letter-spacing: .32em;
+    margin-right: -.32em;
+    font-variant-numeric: tabular-nums;
+  }
+  .st-slotname {
+    margin-top: 1vh;
+    font-size: min(1.9vh, 1.15vw);
+    letter-spacing: .3em;
+    margin-right: -.3em;
+    opacity: .85;
+  }
+
+  /* ── 左侧：PLAYLIST + 星期
+     字号上限按最长的 Wednesday 算：它约 7.5 个字号宽，5.2vw 时右边停在 42vw，
+     歌单从 46vw 开始，两者横向永远不重叠 */
+  .st-head { left: var(--st-x); top: 34vh; transition: opacity .35s; }
+  .st-pl {
+    font: 800 min(5.4vh, 3.3vw)/1 var(--st-display);
+    color: var(--st-gold);
+    letter-spacing: .02em;
+  }
+  .st-week {
+    margin: 1.2vh 0 0 -.04em;
+    font: 800 min(12vh, 5.2vw)/1 var(--st-display);
+    color: var(--st-gold);
+    letter-spacing: .12em;
+    white-space: nowrap;
+  }
+
+  /* 操作栏把歌单往上推、仍然撞到大字或右上角时，被撞的那块先让开（stage.js 的 makeRoom） */
+  .stage.awake .st-crowd { opacity: 0; }
+
+  .st-cover {
+    width: min(22vh, 13vw); aspect-ratio: 1;
+    margin-top: 1.4vh;
+    object-fit: cover;
+    box-shadow: 0 1.2vh 4vh rgba(0, 0, 0, .55);
+  }
+  .st-cover[hidden] { display: none; }
+
+  /* ── 歌单：在大字右边、画面中段，和参考图同一个位置。
+     三列两行；屏幕够宽时四列。显示几首由 stage.js 按实际列数算 */
+  .st-tracks {
+    left: 46vw; right: var(--st-x); top: 46vh;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3.6vh 2.4vw;
+    transition: transform .35s;
+  }
+  /* 四列要到 1700px 才放得下：1440 时每列只剩 157px，替代歌手的名字被截成几个字母 */
+  @media (min-width: 1700px) {
+    .st-tracks { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  /* 操作栏浮起来时整块往上推，推多少由 stage.js 量出来写进 --lift */
+  .stage.awake .st-tracks { transform: translateY(calc(-1 * var(--lift, 0px))); }
+  .st-trk {
+    display: flex; flex-direction: column; align-items: flex-end;
+    background: none; border: 0; padding: 0; margin: 0;
+    color: var(--st-cream);
+    font: 400 min(2.1vh, 1.3vw)/1.4 var(--st-caps);
+    letter-spacing: .05em;
+    text-align: right;
+    cursor: pointer;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, .55);
+    min-width: 0;
+  }
+  .st-trk > span { max-width: 100%; overflow: hidden; }
+  /* 艺人名太长时折成两行再截断 —— 替代版本的意义全在「换成了谁」，不能只剩几个字母。
+     overflow-wrap 让一个比整列还宽的单词也能断开，而不是被硬切掉一截 */
+  .st-a { display: flex; justify-content: flex-end; }
+  .st-an {
+    min-width: 0; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow-wrap: anywhere;
+  }
+  /* 歌名和替代说明最多两行，再长才截断 */
+  .st-t, .st-why {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .st-why {
+    margin-top: .3em;
+    font: 400 .82em/1.45 var(--sans);
+    letter-spacing: .02em;
+    opacity: .85;
+  }
+  .st-trk:hover .st-t { text-decoration: underline; text-underline-offset: .25em; }
+  .st-trk:focus-visible { outline: 2px solid var(--st-cur); outline-offset: 4px; }
+  .st-trk.on { color: var(--st-cur); }
+  /* 还没开播：按下播放会放的那首，暗一点的金色 */
+  .st-trk.cue { color: color-mix(in srgb, var(--st-cur) 60%, var(--st-cream)); }
+  .st-trk.alt { opacity: .62; }
+  .st-tag {
+    display: inline-block;
+    margin-right: .5em;
+    font: 600 .85em/1.3 var(--sans);
+    letter-spacing: .1em;
+    padding: 0 .4em;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+  }
+
+  /* ── 左下：转圈的徽章，只在播放时转 */
+  .st-badge {
+    left: var(--st-x); bottom: 4vh;
+    width: min(15vh, 9vw); height: min(15vh, 9vw);
+    fill: var(--st-gold);
+    font: 700 9px var(--st-display);
+    letter-spacing: .1em;
+    animation: st-spin 24s linear infinite;
+    animation-play-state: paused;
+    transition: opacity .4s;
+  }
+  .stage.playing .st-badge { animation-play-state: running; }
+  @keyframes st-spin { to { transform: rotate(360deg); } }
+
+  /* ── 右下：频谱 */
+  .st-wave {
+    right: var(--st-x); bottom: 4vh;
+    width: min(26vw, 340px); height: min(7vh, 60px);
+    opacity: .9;
+    transition: opacity .4s;
+  }
+
+  /* ═══ 操作栏 ═══ */
+  .st-dock {
+    left: var(--st-x); right: var(--st-x); bottom: 3vh;
+    display: flex; flex-direction: column; gap: 12px;
+    padding: 14px 18px 16px;
+    border-radius: 14px;
+    background: rgba(18, 12, 8, .66);
+    border: 1px solid rgba(232, 211, 163, .22);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    text-shadow: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: opacity .35s, transform .35s, visibility 0s linear .35s;
+  }
+  .stage.awake .st-dock {
+    opacity: 1; visibility: visible; transform: none;
+    transition-delay: 0s;
+  }
+  /* 操作栏浮出时，徽章和频谱让位 */
+  .stage.awake .st-badge, .stage.awake .st-wave { opacity: 0; }
+
+  .st-say-row { display: flex; align-items: flex-start; gap: 16px; }
+  .st-say {
+    flex: 1; min-width: 0; margin: 0;
+    font-size: 15px; line-height: 1.6;
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .st-say span {
+    flex: 1 1 24em; min-width: 0;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .st-say b {
+    font: 700 11px var(--st-display);
+    letter-spacing: .22em;
+    color: var(--st-cur);
+    flex: none;
+  }
+  .st-say[data-kind="hint"] { color: rgba(246, 239, 226, .7); }
+  .st-say[data-kind="wait"] span { color: rgba(246, 239, 226, .7); }
+  .st-say[data-kind="error"] b { color: var(--alarm); }
+  .st-say .chip { flex: none; }
+  .st-credit {
+    flex: none;
+    font: 500 10px var(--mono);
+    letter-spacing: .14em;
+    color: rgba(246, 239, 226, .45);
+    padding-top: 4px;
+  }
+
+  .st-row { display: flex; align-items: center; gap: 20px; min-width: 0; }
+  .st-slot-np { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .st-slot-status, .st-slot-tp { flex: none; }
+  /* 投屏面板关着时整格收起，不然操作栏里平白多一道间距 */
+  #st-cast-slot:empty,
+  #st-cast-slot:has(> .cast-panel[hidden]) { display: none; }
+
+  /* 搬进来的部件，换成这块画面的配色。
+     选择器都挂在 .st-dock 下面：部件搬回手机布局时，这些规则自然失效。 */
+  .st-dock .transport { gap: 10px; }
+  .st-dock .tbtn {
+    width: 36px; height: 36px; font-size: 11px;
+    color: var(--st-cream);
+    border-color: rgba(246, 239, 226, .3);
+  }
+  .st-dock .tbtn:hover:not(:disabled) { border-color: var(--st-cream); }
+  .st-dock .tbtn.on { color: var(--st-cur); border-color: var(--st-cur); }
+  .st-dock .tbtn:focus-visible { outline-color: var(--st-cur); }
+
+  .st-dock .np-title { font-size: 14px; color: var(--st-cream); }
+  .st-dock .np-title:empty::before { content: "还没有在播的曲目"; color: rgba(246, 239, 226, .55); }
+  .st-dock .np-title em { color: rgba(246, 239, 226, .6); }
+  .st-dock .scrub { gap: 10px; }
+  .st-dock .rd { color: rgba(246, 239, 226, .6); }
+  .st-dock .rd-live { color: var(--st-cur); }
+  .st-dock .rail { height: 3px; background: rgba(246, 239, 226, .2); }
+  .st-dock .rail i { background: var(--st-cur); }
+
+  .st-dock .status { gap: 8px; }
+  .st-dock .mic {
+    font-size: 10px; padding: 5px 9px;
+    color: rgba(246, 239, 226, .75);
+    border-color: rgba(246, 239, 226, .28);
+  }
+  .st-dock .mic:hover { color: var(--st-cream); border-color: var(--st-cream); }
+  .st-dock .status .lbl { color: rgba(246, 239, 226, .6); }
+  .st-dock .status .lbl.live { color: var(--signal); }
+
+  .st-dock .cast-panel { padding: 0; }
+
+  .st-slot-in { gap: 14px; }
+  .st-dock .composer {
+    position: static;
+    flex: 1; min-width: 0;
+    padding: 0; border: 0;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .st-dock .composer input {
+    font: 14px var(--sans);
+    padding: 10px 14px;
+    color: var(--st-cream);
+    background: rgba(246, 239, 226, .08);
+    border: 1px solid rgba(246, 239, 226, .2);
+    border-radius: 10px;
+  }
+  .st-dock .composer input::placeholder { color: rgba(246, 239, 226, .5); }
+  .st-dock .composer input:focus { border-color: var(--st-cur); }
+  .st-dock .send {
+    width: 44px; border-radius: 10px;
+    color: var(--st-cur); border-color: var(--st-cur);
+  }
+  .st-dock .quick { padding: 0; flex: none; overflow: visible; }
+  .st-dock .chip {
+    color: var(--st-cream);
+    border-color: rgba(246, 239, 226, .3);
+  }
+  .st-dock .chip:hover { color: var(--st-cur); border-color: var(--st-cur); }
+
+  /* 平板：手指点的按钮至少 44px 高 */
+  @media (pointer: coarse) {
+    .st-dock .tbtn { width: 44px; height: 44px; }
+    .st-dock .chip, .st-dock .mic { min-height: 40px; }
+    .st-dock .send { min-height: 44px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .st-badge { animation: none; }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .eq.on i { animation: none; }
   .led.busy { animation: none; }

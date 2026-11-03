@@ -18,6 +18,8 @@ const SHELL = [
   "/style.css",
   "/app.js",
   "/tts.js",
+  "/stage.js",
+  "/scenes.js",
   "/manifest.json",
   "/icon-192.png",
   "/icon-512.png",

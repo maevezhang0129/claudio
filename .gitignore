@@ -21,3 +21,6 @@ user/raw/
 # 第三方参考素材（他人原创内容）——只留本地，绝不提交。
 # diagram/ 下你自己画的架构图不受影响，可以正常提交。
 diagram/reference/
+
+# 设计讨论时的浏览器示意图（brainstorming 工具生成），只留本地
+.superpowers/

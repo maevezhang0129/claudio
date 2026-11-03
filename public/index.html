@@ -11,7 +11,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:ROND,wght@100,300;100,500;100,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:ROND,wght@100,300;100,500;100,700&family=IBM+Plex+Mono:wght@400;500&family=Jost:wght@600;800&family=Cinzel:wght@400;600&display=swap">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -169,6 +169,61 @@
     </p>
   </div>
 </main>
+
+<!-- ═══ 大屏播放画面 ═══
+     只在横向的大屏幕上出现（条件见 style.css 和 stage.js 里的 WIDE）。
+     操作栏的几个空槽在进入大屏时由 stage.js 把手机布局里的对应部件搬进来。 -->
+<section class="stage" id="stage" aria-label="播放画面">
+  <!-- 两层照片交替淡入。照片是装饰，alt 留空 -->
+  <img class="st-photo" id="st-photo-a" alt="">
+  <img class="st-photo" id="st-photo-b" alt="">
+  <div class="st-shade" aria-hidden="true"></div>
+
+  <button class="st-by" id="st-by" type="button" title="打开个人资料">
+    COLLECTED BY <span>Claudio</span>
+  </button>
+
+  <!-- 右上角是「此刻」：正在放的这首 + 日期时间 -->
+  <div class="st-corner" id="st-corner">
+    <!-- 封面地址来自音源接口：只进 img.src -->
+    <img class="st-cover" id="st-cover" alt="" hidden>
+    <div class="st-clock">
+      <div class="st-dd" id="st-dd">--</div>
+      <div class="st-mon" id="st-mon">&nbsp;</div>
+      <div class="st-time" id="st-time">--:--</div>
+      <div class="st-slotname" id="st-slotname"></div>
+    </div>
+  </div>
+
+  <div class="st-head" id="st-head">
+    <div class="st-pl">PLAYLIST</div>
+    <h1 class="st-week" id="st-week">&nbsp;</h1>
+  </div>
+
+  <div class="st-tracks" id="st-tracks" aria-label="歌单"></div>
+
+  <svg class="st-badge" viewBox="0 0 100 100" aria-hidden="true">
+    <defs><path id="st-ring" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/></defs>
+    <text><textPath href="#st-ring" textLength="230">CLAUDIO · ON AIR · CLAUDIO · ON AIR ·</textPath></text>
+  </svg>
+
+  <canvas class="st-wave" id="st-wave" aria-hidden="true"></canvas>
+
+  <!-- 操作栏：平时退下，动一下才浮出 -->
+  <div class="st-dock" id="st-dock">
+    <div class="st-say-row">
+      <p class="st-say" id="st-say" aria-live="polite"></p>
+      <span class="st-credit">Photo · Unsplash</span>
+    </div>
+    <div id="st-cast-slot"></div>
+    <div class="st-row">
+      <div class="st-slot-tp" id="st-tp-slot"></div>
+      <div class="st-slot-np" id="st-np-slot"></div>
+      <div class="st-slot-status" id="st-status-slot"></div>
+    </div>
+    <div class="st-row st-slot-in" id="st-in-slot"></div>
+  </div>
+</section>
 
 <!-- 悬浮窗的内容。平时藏着，开窗时整块搬进 PiP 文档；关窗再搬回来。
      搬移而不是克隆：这样 els 里的引用和已绑定的监听器全都继续有效。 -->

@@ -267,6 +267,37 @@ key) and `user/` (the personal corpus). A path-traversal bug in the static
 handler is not theoretical here. Keep `@fastify/static` current, and treat an
 audit finding against it as urgent rather than routine.
 
+### The wide-screen stage is a second layout, not a second app
+
+`public/stage.js` turns wide landscape screens (computers, tablets held sideways)
+into an ambient, poster-like screen. Phones keep the original layout. It holds
+together under these rules:
+
+- **The breakpoints are written twice.** `WIDE` and `FOUR_COLS` in `stage.js`
+  mirror the `@media` conditions in `style.css`. Change one, change the other.
+- **Controls are moved, never cloned.** On entry the status light, transport,
+  progress bar, cast panel, input and quick chips are moved into the stage's bar,
+  then put back at comment bookmarks on exit. This is the same approach the
+  floating window uses, so every listener in `app.js` keeps working. A new control
+  in the phone layout needs a slot in `moves[]`, or it disappears on wide screens.
+  Never build a duplicate that has to be kept in sync.
+- **The phone layout does not change.** Every stage rule sits inside the wide
+  `@media` block, except `.stage { display: none; }`.
+- **Narrow screens download nothing for the stage.** An `<img>` fetches its `src`
+  even inside `display:none`, so scene photos and the stage cover are assigned
+  only while the stage is visible. Otherwise every track change costs a phone
+  hundreds of KB for an image nobody can see.
+- **Scene photos must be licensed for redistribution.** Use Unsplash or Pexels.
+  Never use Pinterest, Canva free media, or frames from someone else's playlist
+  video. Each photo's id is recorded in `public/scenes.js`.
+- **Day or night follows the clock on screen**, which is the server-synced time,
+  not the device clock. A tablet one second behind the Mac otherwise picks a
+  sunlit photo at 19:00 and keeps it.
+- **Nothing that measures layout runs while the stage is hidden** (narrow screen,
+  or profile open). Hidden elements report unresolved values: the grid once read
+  `repeat(4, …)` as three columns and dropped two tracks. The column count comes
+  from a media query, and trimming and spacing wait for `refresh()`.
+
 ## Privacy
 
 `user/*.md` is the owner's personal taste corpus — listening habits, daily

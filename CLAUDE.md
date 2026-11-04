@@ -24,7 +24,7 @@ code comments; they stay as they are.
 ```bash
 npm run dev:stub    # offline — no API calls, no cost; drives the UI from fixed scripts
 npm run dev         # live — needs a model API key
-npm run verify      # 34 pipeline assertions + 33 matching edge cases; costs nothing
+npm run verify      # 34 pipeline assertions + 34 edge cases (68 checks); costs nothing
 npm run typecheck
 npm run certs       # sign a local TLS cert (needs mkcert); re-run when the LAN IP changes
 npm run netease:api # start the self-hosted NeteaseCloudMusicApi on :3000

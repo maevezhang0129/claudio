@@ -7,12 +7,42 @@ to you like a late-night DJ.
 Not a recommendation algorithm — a prompt assembler plus a thin layer of API glue.
 All the intelligence lives in the corpus you write; the code just keeps it honest.
 
-![Claudio on a laptop: a café photo behind "PLAYLIST Wednesday" in large type, the current album cover beside the date and time, and the queue as small-caps artist and title pairs](design/stage.jpg)
+![Claudio running on a laptop: an idle café screen, the controls appearing, a track change, asking the DJ for something to focus to, and its reply replacing the queue](design/demo.webp)
 
-*On a computer or a tablet held sideways, Claudio runs as an ambient screen. The photo
-changes with every song, a day set or a night set, and the controls only appear when
-you move the mouse or tap. Phones get a compact player-and-chat layout instead.
-Sample queue; photos from Unsplash.*
+*On a computer or a tablet held sideways, Claudio runs as an ambient screen: a new
+photo with every song, controls only when you move the mouse or tap. Phones get a
+compact player-and-chat layout instead. Recorded in offline mode
+(`npm run dev:stub`, no model cost) with a sample queue; photos from Unsplash.
+[Full-resolution MP4](design/demo.mp4).*
+
+**What's worth a look**
+
+- **It checks the model instead of trusting it.** Every track the model names is
+  looked up in a real catalogue, and invented ones are dropped, including titles
+  padded around a real one (「永夜的第七章序曲」 contains 「夜的第七章」). When the
+  model calls a pick "new to you", code counts that against your library. It once
+  said so about an artist with 186 plays.
+  [→ resolve()](#key-design-resolve-returns-three-states) ·
+  [→ counted in code](#out-of-library-picks-are-demanded-in-the-prompt-and-counted-in-code)
+- **Prompt behaviour is measured, not assumed.** The prompt splits into a cached
+  stable prefix and a per-turn tail, with assertions that nothing time-dependent
+  leaks into the cache. A countable rule the model ignored works once it is the
+  last thing in the prompt. Long sessions turned out to copy their own earlier
+  replies (0 new artists, against 3 of 4 in a fresh session), so every visit
+  starts a fresh one.
+- **Product calls follow the real signal.** "Recommended" and "listened" are
+  separate records, because the first version showed 9 plays when nobody had
+  opened a song. A skip is the system's only negative signal, and it counts once
+  per day: one burst of skipping briefly flagged the owner's two favourite artists
+  as dislikes. [→ the plays table](#the-plays-table-was-recording-recommendations)
+- **Choices are measured before they are made.** The music sources were compared
+  on 30 tracks over 3 rounds before the combined one became the default, and
+  nothing that costs money runs without a person asking for it.
+  [→ measurements](#measured-three-providers-one-set-of-tracks)
+
+Built with Claude Code as a pair programmer, under a written rulebook
+([CLAUDE.md](CLAUDE.md)) and a 68-check `npm run verify` that pins every
+regression found so far.
 
 **Status: stage ③ complete — a mixed music source, a schedule that fires on its own, spoken announcements, and casting to a DLNA device.**
 
@@ -44,7 +74,7 @@ Open https://localhost:8080. The startup banner also prints a LAN address so you
 can reach it from your phone on the same Wi-Fi.
 
 ```bash
-npm run verify      # 34 pipeline assertions + 33 matching edge cases — costs nothing
+npm run verify      # 34 pipeline assertions + 34 edge cases (68 checks) — costs nothing
 npm run typecheck
 ```
 
@@ -154,7 +184,7 @@ Pluggable via `CLAUDIO_MUSIC_PROVIDER`.
 |---|---|---|---|
 | **`mixed`** | ✅ **default** | free | NetEase recognises, iTunes plays — see the measurements below |
 | `itunes` | ✅ implemented | free, no auth | search validation · artwork · 30s preview |
-| `netease` | ✅ implemented | free, self-hosted | best Mandarin catalog · full tracks **with a logged-in cookie** |
+| `netease` | ✅ implemented, **optional** | free, self-hosted, unofficial API | best Mandarin catalog · full tracks **with a logged-in cookie** |
 | `applemusic` | not implemented | $99/yr Developer Program + your Apple Music subscription | full playback |
 
 iTunes is the right starting point because the `trackId` it returns **is** the
@@ -193,6 +223,12 @@ Starting from iTunes and treating NetEase as a second opinion makes the
 improvement strictly additive.
 
 ### NetEase: read the cookie note before you switch
+
+NetEase is optional. NetEase Cloud Music publishes no public API, so this goes
+through the community-maintained
+[NeteaseCloudMusicApi](https://www.npmjs.com/package/NeteaseCloudMusicApi), a
+reverse-engineered client you run yourself. Without it, `mixed` runs as plain
+iTunes and the startup banner says so. Nothing else in Claudio depends on it.
 
 ```bash
 npm run netease:api     # starts a self-hosted NeteaseCloudMusicApi on :3000
@@ -576,11 +612,29 @@ needed a schema migration to get there.
 它不是推荐算法，而是**一个 prompt 组装器加一层薄薄的 API 胶水**。全部智能都在
 你自己写的语料里，代码只负责让它保持诚实。
 
-![Claudio 在笔记本上的样子：咖啡馆照片上是大字「PLAYLIST Wednesday」，右上角是当前专辑封面和日期时间，歌单用小型大写排成两行](design/stage.jpg)
+![Claudio 在笔记本上运行：闲置时的咖啡馆画面、操作栏浮出、切歌、让 DJ 放点适合专注的、它的回答换掉了整个歌单](design/demo.webp)
 
-*在电脑或横放的平板上，Claudio 是一块放在一边的氛围屏：每首歌换一张照片，白天、晚上各一组；
+*在电脑或横放的平板上，Claudio 是一块放在一边的氛围屏：每首歌换一张照片，
 操作栏动一下鼠标或点一下屏幕才出现。手机上是紧凑的播放器加对话界面。
-图中是示例歌单，照片来自 Unsplash。*
+录制时用的是离线模式（`npm run dev:stub`，不花模型钱）和示例歌单，照片来自 Unsplash。
+[高清 MP4](design/demo.mp4)。*
+
+**值得一看的地方**
+
+- **它核对模型，而不是相信模型。** 模型说出的每首歌都要在真实曲库里查到，
+  编造的会被丢掉，包括套在真歌名外面的那种（「永夜的第七章序曲」包着「夜的第七章」）。
+  模型说某首「你没听过」，由代码对照曲库去数 —— 它曾经这样说过一个播了 186 次的艺人。
+- **提示词的效果是量出来的，不是假设的。** prompt 分成会被缓存的稳定前缀和每轮变化的尾部，
+  有断言保证带时间的内容不会漏进缓存。一条被模型无视的可数规则，挪到 prompt 最后才生效。
+  实测长会话会模仿自己之前的回答（库外艺人 0 个，新会话是 4 个里 3 个），所以每次打开都是新会话。
+- **产品判断跟着真实信号走。** 「推荐过」和「听过」分开记，因为第一版在一首都没被点开时
+  显示播放了 9 次。跳过是系统里唯一的负反馈，而且按天计：一次连续快切曾经把主人最常听的
+  两位艺人标成了不喜欢。
+- **先量再选。** 几个音源在 30 首歌上各跑三轮比较之后，才把组合方案定为默认；
+  任何花钱的操作都必须有人明确触发。
+
+用 Claude Code 结对开发，有一份成文的规则（[CLAUDE.md](CLAUDE.md)），
+以及 68 项的 `npm run verify` 守住至今发现过的每一个回归。
 
 **当前状态：阶段③ 完成 —— 混合音源、会自己到点换档的排期、语音播报、投到 DLNA 设备外放。**
 
@@ -607,7 +661,7 @@ npm run certs                             # 换 WiFi、IP 变了就重跑
 打开 https://localhost:8080。启动横幅还会打印局域网地址，手机连同一 WiFi 可直接访问。
 
 ```bash
-npm run verify      # 34 项管线断言 + 33 条匹配边界用例，不花钱
+npm run verify      # 34 项管线断言 + 34 条边界用例（共 68 项），不花钱
 npm run typecheck
 ```
 
@@ -690,7 +744,7 @@ alternate 一律降级到队列末尾，且每次回复最多保留一首。
 |---|---|---|---|
 | **`mixed`** | ✅ **默认** | 免费 | 网易云认歌、iTunes 出声 —— 实测见下 |
 | `itunes` | ✅ 已实现 | 免费、零鉴权 | 搜索校验 · 封面 · 30 秒试听 |
-| `netease` | ✅ 已实现 | 免费，需自建 | 华语曲库最全 · **带登录 cookie 才能整曲播放** |
+| `netease` | ✅ 已实现，**可选** | 免费，需自建，非官方接口 | 华语曲库最全 · **带登录 cookie 才能整曲播放** |
 | `applemusic` | 未实现 | $99/年 Developer Program + 你的 Apple Music 订阅 | 整曲播放 |
 
 选 iTunes 起步的理由：它返回的 `trackId` **就是** Apple Music catalog ID，
@@ -724,6 +778,11 @@ iTunes 根本没听说过这个东西，于是这首歌从「能播」变成了�
 改成以 iTunes 打底、网易云只当第二意见之后，网易云带来的就只有加法。
 
 ### 网易云：切过去之前先看 cookie 这一段
+
+网易云是可选的。网易云音乐没有公开 API，这里用的是社区维护的
+[NeteaseCloudMusicApi](https://www.npmjs.com/package/NeteaseCloudMusicApi) ——
+一个逆向出来、需要自己运行的客户端。不开它的话 `mixed` 就是纯 iTunes，
+启动横幅会明说。Claudio 的其他部分都不依赖它。
 
 ```bash
 npm run netease:api     # 起一个自建的 NeteaseCloudMusicApi，监听 :3000

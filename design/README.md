@@ -1,11 +1,20 @@
 # Design
 
-## `stage.jpg`
+## `demo.webp`, `demo.mp4`, `stage.jpg`
 
-The wide-screen stage as built (1440×900), used at the top of the main README.
-The queue is sample content injected in the browser, so the owner's real listening
-history never reaches a public image. The photo is one of the Unsplash scenes in
+The wide-screen stage as built. `demo.webp` (960px, about 0.8 MB) opens the main
+README; `demo.mp4` is the same 17-second clip at 1600px, for portfolio pages and
+posts where a video plays better than an animated image. `stage.jpg` (1440×900) is a
+still for thumbnails.
+
+All three were recorded in offline mode (`npm run dev:stub`): the DJ's reply is a
+fixed script, so no model was paid for and no real conversation appears. The
+starting queue is sample content injected in the browser, so the owner's real
+listening history never reaches a public file. The photos are Unsplash scenes from
 `public/scenes/`.
+
+The clip was cut from one take to remove a few seconds of waiting. The wait for the
+DJ's reply is sped up 3×; everything else plays in real time.
 
 The stage takes its look from playlist-video covers (a café photo, a big title,
 the queue in small caps), not from the mockup below. It is a second visual world
